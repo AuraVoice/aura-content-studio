@@ -1,0 +1,29 @@
+2026-07-28
+Problem: ESLint 9 failed before linting with "Converting circular structure to JSON".
+Issue: Next 16 exports native flat configurations, but wrapping them with FlatCompat made ESLint's config validator traverse a circular plugin graph.
+Solution: Import eslint-config-next/core-web-vitals and eslint-config-next/typescript directly and compose them with defineConfig.
+Justification: The native flat exports match ESLint 9 and Next 16, avoid compatibility serialization, and keep the same rule coverage.
+
+2026-07-28
+Problem: The latest Next 16 install reported high-severity 2026 advisories in its transitive PostCSS and Sharp packages, plus glob-matching advisories in development tools.
+Issue: npm's suggested forced fix incorrectly proposed downgrading Next to 9.3.3 and using breaking tool changes.
+Solution: Pin patched transitive releases with npm overrides, remove the unused coverage package, then rerun lint, tests, build, and audit.
+Justification: This keeps the current framework, closes the vulnerable dependency paths, and verifies compatibility instead of accepting npm's unsafe downgrade.
+
+2026-07-28
+Problem: A camera-only revision could preserve global locks while still allowing visual, dialogue, overlay, and timing details inside each shot to drift.
+Issue: Locked attributes and shot-level fields are separate structures, so copying only lockedAttributes was incomplete.
+Solution: Merge only the generated camera field into the prior shot plan and retain all other shot fields plus negative constraints, model, and failure watch.
+Justification: "Change only" is a structural invariant and must be enforced in code after model output, not trusted to prompting alone.
+
+2026-07-28
+Problem: The initial credential design added a separate session secret and a second search vendor even though this is a one-owner tool and Brave Search is already used by the wider Aura product.
+Issue: Extra independent secrets and providers increase setup and rotation work without adding useful isolation at this scale.
+Solution: Derive the JWT signing key with scrypt from the strong studio password and replace Tavily with the Brave Search Web API plus local mocks.
+Justification: Password rotation now invalidates all sessions automatically, and the application reuses the existing search vendor while keeping server-side key isolation.
+
+2026-07-28
+Problem: A private bucket was serving videos through temporary signed URLs embedded in dashboard state, and login had no online guessing controls.
+Issue: Anyone who obtained a signed URL could use it until expiry, while unlimited login attempts increased password-guessing exposure.
+Solution: Replace signed URLs with an authenticated same-origin media route, move to random opaque database sessions, add IP and account lockouts, revoke anonymous database function access, and disable caching.
+Justification: Authorization is now checked at the moment each video is requested, leaked media paths are useless without the owner session, and online password guessing is bounded.
