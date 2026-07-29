@@ -342,7 +342,9 @@ a {
 .workspace {
   display: grid;
   grid-template-rows: 84px minmax(0, 1fr);
+  min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 
 .topbar {
@@ -399,7 +401,9 @@ a {
 }
 
 .content-scroll {
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   padding: 32px 38px 24px;
 }
 
@@ -1198,6 +1202,7 @@ a {
 
   .workspace {
     display: block;
+    overflow: visible;
   }
 
   .topbar {
@@ -1224,4 +1229,3 @@ a {
     font-size: 22px;
   }
 }
-

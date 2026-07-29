@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { campaignScheduleStatus } from "@/lib/campaign-schedule";
 import { env } from "@/lib/env";
 import {
   claimDailyCampaign,
@@ -18,6 +19,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
   const date = localDate(env().STUDIO_TIMEZONE);
+  const scheduleStatus = campaignScheduleStatus(date);
+  if (scheduleStatus !== "active") {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason: scheduleStatus,
+      date
+    });
+  }
   const campaign = await claimDailyCampaign(date);
   const campaignId = campaign.id as string;
   const run = await claimWorkflowRun({
@@ -58,4 +68,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: text }, { status: 500 });
   }
 }
-

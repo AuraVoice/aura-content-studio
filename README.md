@@ -143,12 +143,12 @@ Content-Type: application/json
 1. Import the repository into a separate private studio Vercel project. Use a dedicated hostname such as `studio.auravoiceapp.com`, not the public marketing site route tree.
 2. Add every value from `.env.example`. Set `SEARCH_PROVIDER=brave`.
 3. Set `APP_URL` to the production URL.
-4. Deploy. `vercel.json` schedules daily research at `16:00 UTC`, which is 08:00 Pacific Standard Time and 09:00 Pacific Daylight Time.
+4. Deploy. `vercel.json` schedules daily research at `15:00 UTC`, which is 08:00 Pacific Daylight Time for the active July 29 through August 27, 2026 campaign window.
 5. Register the production Telegram webhook after the first deployment.
 6. Sign in, close the browser, reopen it, and confirm the studio asks for credentials again.
 7. Copy a video request URL from browser developer tools into a private window. It must return `401`.
 
-Vercel cron schedules are UTC. Change the expression if a fixed local hour through daylight saving changes is important.
+Vercel cron schedules are UTC. The daily endpoint runs campaign work only from July 29 through August 27, 2026, inclusive, for exactly 30 daily runs. Outside that window it returns a successful no-op response before any provider or database call. Vercel Hobby plans may invoke a daily cron at any time within the selected hour; Pro and Enterprise invoke it within the configured minute.
 
 ## LangGraph workflow
 
