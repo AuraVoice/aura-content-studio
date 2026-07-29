@@ -180,6 +180,7 @@ export const demoSnapshot: CampaignSnapshot = {
       id: "demo-run",
       eventType: "daily",
       status: "completed",
+      runVersion: 2,
       claimedAt: new Date(Date.now() - 72e5).toISOString(),
       completedAt: new Date(Date.now() - 71e5).toISOString()
     }

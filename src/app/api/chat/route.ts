@@ -8,10 +8,12 @@ import {
   getActiveCampaign,
   listIdeas,
   localDate,
-  saveMessage
+  saveMessage,
+  updateCampaign
 } from "@/lib/repository";
 import { sendTelegramMessage } from "@/lib/telegram/client";
 import { invokeWorkflow } from "@/lib/workflow/service";
+import { describeWorkflowFailure } from "@/lib/workflow/errors";
 
 interface ChatRequest {
   message?: string;
@@ -90,8 +92,20 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ messages: result.messages, status: result.state.status });
   } catch (error) {
-    const text = error instanceof Error ? error.message : "Dashboard chat failed";
-    await completeWorkflowRun(run.id, "failed", undefined, text);
-    return invalid(text, 500);
+    const failure = describeWorkflowFailure(error);
+    await updateCampaign(
+      campaignId,
+      {
+        status: "failed",
+        current_step: "Dashboard request failed",
+        error: failure.message
+      },
+      Number(campaign.run_version)
+    );
+    await completeWorkflowRun(run.id, "failed", { failure }, failure.message);
+    return NextResponse.json(
+      { error: failure.message, code: failure.code, retryable: failure.retryable },
+      { status: 500 }
+    );
   }
 }

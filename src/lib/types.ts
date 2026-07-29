@@ -140,6 +140,13 @@ export interface WorkflowRunLog {
   eventType: string;
   status: "claimed" | "completed" | "failed" | "stale";
   error?: string;
+  runVersion: number;
+  failure?: {
+    code: string;
+    message: string;
+    technicalDetail: string;
+    retryable: boolean;
+  };
   claimedAt: string;
   completedAt?: string;
 }

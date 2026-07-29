@@ -2,10 +2,12 @@ import { env } from "@/lib/env";
 import {
   claimWorkflowRun,
   completeWorkflowRun,
-  saveMessage
+  saveMessage,
+  updateCampaign
 } from "@/lib/repository";
 import { sendTelegramMessage } from "@/lib/telegram/client";
 import { invokeWorkflow } from "./service";
+import { describeWorkflowFailure } from "./errors";
 
 interface ResearchCampaign {
   id: string;
@@ -76,8 +78,17 @@ export async function executeResearchRun(input: {
       status: result.state.status
     };
   } catch (error) {
-    const text = error instanceof Error ? error.message : "Research workflow failed";
-    await completeWorkflowRun(run.id, "failed", undefined, text);
-    throw error;
+    const failure = describeWorkflowFailure(error);
+    await updateCampaign(
+      campaignId,
+      {
+        status: "failed",
+        current_step: "Research failed",
+        error: failure.message
+      },
+      Number(input.campaign.run_version)
+    );
+    await completeWorkflowRun(run.id, "failed", { failure }, failure.message);
+    throw new Error(failure.message);
   }
 }

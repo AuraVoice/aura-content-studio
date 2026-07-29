@@ -640,11 +640,14 @@ function mapMessage(row: Row): StudioMessage {
 }
 
 function mapWorkflowRun(row: Row): WorkflowRunLog {
+  const result = row.result as { failure?: WorkflowRunLog["failure"] } | null;
   return {
     id: String(row.id),
     eventType: String(row.event_type),
     status: row.status as WorkflowRunLog["status"],
     error: row.error ? String(row.error) : undefined,
+    runVersion: Number(row.run_version),
+    failure: result?.failure,
     claimedAt: String(row.claimed_at),
     completedAt: row.completed_at ? String(row.completed_at) : undefined
   };

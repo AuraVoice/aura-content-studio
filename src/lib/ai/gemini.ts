@@ -21,19 +21,57 @@ function extractJson(text: string): unknown {
 export async function generateStructured<T>(
   schema: ZodType<T>,
   prompt: string,
-  options: { model?: string; temperature?: number } = {}
+  options: { model?: string; temperature?: number; maxAttempts?: number } = {}
 ): Promise<T> {
-  const response = await client().models.generateContent({
-    model: options.model ?? env().GEMINI_TEXT_MODEL,
-    contents: prompt,
-    config: {
-      temperature: options.temperature ?? 0.35,
-      responseMimeType: "application/json",
-      responseJsonSchema: z.toJSONSchema(schema)
+  const maxAttempts = Math.max(1, options.maxAttempts ?? 2);
+  let validationContext = "";
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const response = await client().models.generateContent({
+      model: options.model ?? env().GEMINI_TEXT_MODEL,
+      contents: `${prompt}${validationContext}`,
+      config: {
+        temperature: attempt === 1 ? options.temperature ?? 0.35 : 0.1,
+        responseMimeType: "application/json",
+        responseJsonSchema: z.toJSONSchema(schema)
+      }
+    });
+    if (!response.text) {
+      lastError = new Error("Gemini returned an empty response");
+      validationContext =
+        "\n\nThe previous response was empty. Return one complete JSON object that matches the schema.";
+      continue;
     }
-  });
-  if (!response.text) throw new Error("Gemini returned an empty response");
-  return schema.parse(extractJson(response.text));
+    try {
+      return schema.parse(extractJson(response.text));
+    } catch (error) {
+      lastError = error;
+      const issues =
+        error instanceof z.ZodError
+          ? error.issues
+              .slice(0, 8)
+              .map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`)
+              .join("; ")
+          : "The response was not valid JSON.";
+      validationContext = `\n\nYour previous response was rejected. Correct these validation issues and return the full JSON object again: ${issues}`;
+    }
+  }
+
+  throw new StructuredOutputError(maxAttempts, lastError);
+}
+
+export class StructuredOutputError extends Error {
+  readonly code = "MODEL_OUTPUT_INVALID";
+  readonly retryable = true;
+
+  constructor(
+    readonly attempts: number,
+    readonly cause: unknown
+  ) {
+    super(`The AI response failed validation after ${attempts} attempts.`);
+    this.name = "StructuredOutputError";
+  }
 }
 
 export async function evaluateVideoWithGemini<T>(input: {
@@ -87,4 +125,3 @@ export async function evaluateVideoWithGemini<T>(input: {
     await unlink(tempPath).catch(() => undefined);
   }
 }
-

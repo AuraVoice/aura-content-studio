@@ -38,11 +38,13 @@ export function DashboardChat() {
 
   return (
     <div className="dashboard-chat">
+      <label htmlFor="dashboard-orchestrator-message">Message the orchestrator</label>
       <textarea
+        id="dashboard-orchestrator-message"
         value={message}
         disabled={busy}
         maxLength={4000}
-        placeholder="Ask for research, choose an idea, revise a prompt, or give the orchestrator an instruction..."
+        placeholder="Run fresh research, choose an idea, revise a prompt, or ask what happened..."
         onChange={(event) => setMessage(event.target.value)}
         onKeyDown={(event) => {
           if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -52,7 +54,9 @@ export function DashboardChat() {
         }}
       />
       <div>
-        <small aria-live="polite">{status || "Ctrl or Cmd + Enter to send"}</small>
+        <small aria-live="polite" className={busy ? "chat-working" : ""}>
+          {status || "Ctrl or Cmd + Enter to send"}
+        </small>
         <button type="button" disabled={busy || !message.trim()} onClick={() => void submit()}>
           <Send size={15} />
           {busy ? "Working..." : "Send"}

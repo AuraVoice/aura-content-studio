@@ -44,6 +44,31 @@ const scoutSchema = z.object({
   ideas: z.array(ideaSchema).length(3)
 });
 
+function scoutSchemaFor(evidenceCount: number) {
+  return scoutSchema.superRefine((value, context) => {
+    value.ideas.forEach((idea, ideaIndex) => {
+      const seen = new Set<number>();
+      idea.sources.forEach((source, sourceIndex) => {
+        if (source.evidenceIndex > evidenceCount) {
+          context.addIssue({
+            code: "custom",
+            message: `Evidence index must be between 1 and ${evidenceCount}`,
+            path: ["ideas", ideaIndex, "sources", sourceIndex, "evidenceIndex"]
+          });
+        }
+        if (seen.has(source.evidenceIndex)) {
+          context.addIssue({
+            code: "custom",
+            message: "Evidence indexes must be unique within an idea",
+            path: ["ideas", ideaIndex, "sources", sourceIndex, "evidenceIndex"]
+          });
+        }
+        seen.add(source.evidenceIndex);
+      });
+    });
+  });
+}
+
 export function resolveEvidenceSources(
   references: Array<{ evidenceIndex: number; note: string }>,
   research: SearchResult[]
@@ -70,7 +95,12 @@ export async function runTrendScout(
   instruction?: string
 ): Promise<TrendIdea[]> {
   const research = await dailyTrendResearch(provider);
-  const availableResearch = research.slice(0, 24);
+  const availableResearch = Array.from(
+    new Map(research.map((item) => [item.url, item])).values()
+  ).slice(0, 24);
+  if (!availableResearch.length) {
+    throw new Error("No current web research was available. Try the research run again.");
+  }
   const evidence = availableResearch
     .map(
       (item, index) =>
@@ -79,7 +109,7 @@ export async function runTrendScout(
     .join("\n\n");
 
   const result = await generateStructured(
-    scoutSchema,
+    scoutSchemaFor(availableResearch.length),
     `You are Trend Scout, a marketing research specialist for Aura Desktop.
 
 Return exactly three distinct daily ideas. Rank them by likely impact and honesty.
@@ -87,6 +117,8 @@ At least one idea should avoid Higgsfield when a meme, real screenshot, screen r
 For every source, return its evidenceIndex from the numbered evidence below and
 your relevance note. Never return or rewrite a URL. The application resolves the
 index to the exact researched URL.
+Valid evidence indexes are 1 through ${availableResearch.length}. Use each index
+at most once inside an idea. Check every index before returning the JSON.
 
 Aura Desktop facts:
 ${AURA_DESKTOP_FACTS.map((fact) => `- ${fact}`).join("\n")}
@@ -107,7 +139,7 @@ Research evidence:
 ${evidence}
 
 For each idea, explain its specific relevance, honest shelf life, whether Higgsfield is actually needed, and realistic generation risk. Every idea must depict the Windows desktop product.`,
-    { temperature: 0.55 }
+    { temperature: 0.35, maxAttempts: 3 }
   );
 
   return result.ideas

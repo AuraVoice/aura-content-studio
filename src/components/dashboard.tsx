@@ -41,6 +41,18 @@ function formatLabel(format: string): string {
   return format.replaceAll("_", " ");
 }
 
+function readableRunError(run: WorkflowRunLog): string | undefined {
+  if (run.failure?.message) return run.failure.message;
+  if (
+    run.error?.includes("evidenceIndex") ||
+    run.error?.includes("evidence index") ||
+    run.error?.includes("source URL")
+  ) {
+    return "Trend Scout could not validate its source references. No unreliable research was saved.";
+  }
+  return run.error;
+}
+
 function IdeaCard({
   idea,
   selected
@@ -86,16 +98,39 @@ function RunList({ runs }: { runs: WorkflowRunLog[] }) {
   if (!runs.length) return <p className="empty-copy">No workflow runs were recorded.</p>;
   return (
     <div className="run-list">
-      {runs.map((run) => (
-        <div key={run.id}>
-          <span className={`run-status run-${run.status}`}>{run.status}</span>
-          <div>
-            <strong>{formatLabel(run.eventType)}</strong>
-            <small>{new Date(run.claimedAt).toLocaleString()}</small>
-            {run.error ? <p>{run.error}</p> : null}
-          </div>
-        </div>
-      ))}
+      {runs.map((run) => {
+        const started = new Date(run.claimedAt);
+        const completed = run.completedAt ? new Date(run.completedAt) : undefined;
+        const duration = completed
+          ? Math.max(0, Math.round((completed.getTime() - started.getTime()) / 1000))
+          : undefined;
+        const technicalDetail = run.failure?.technicalDetail ?? run.error;
+        const readableError = readableRunError(run);
+        return (
+          <article key={run.id}>
+            <span className={`run-status run-${run.status}`}>{run.status}</span>
+            <div className="run-summary">
+              <strong>{formatLabel(run.eventType)}</strong>
+              <small>
+                {started.toLocaleString()} · {duration === undefined ? "In progress" : `${duration}s`}
+                {" "}· version {run.runVersion}
+              </small>
+              {readableError ? <p>{readableError}</p> : null}
+              <div className="run-meta">
+                <span>Run {run.id.slice(0, 8)}</span>
+                {run.failure?.code ? <span>{run.failure.code}</span> : null}
+                {run.failure?.retryable ? <span>Retry available</span> : null}
+              </div>
+              {technicalDetail ? (
+                <details className="technical-details">
+                  <summary>Technical details</summary>
+                  <pre>{technicalDetail}</pre>
+                </details>
+              ) : null}
+            </div>
+          </article>
+        );
+      })}
     </div>
   );
 }
@@ -517,7 +552,11 @@ export function Dashboard({ snapshot }: { snapshot: CampaignSnapshot }) {
             <div className="card-heading">
               <div>
                 <p className="eyebrow">Daily archive</p>
-                <h2>Research, workflow runs, and finalized prompts</h2>
+                <h2>Everything the studio recorded</h2>
+                <p className="archive-intro">
+                  Open a day to inspect runs, evidence, prompt versions, messages, delivery IDs,
+                  timestamps, and technical failure details.
+                </p>
               </div>
               <span className="count-pill">{snapshot.days.length} days</span>
             </div>

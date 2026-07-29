@@ -27,3 +27,15 @@ Problem: A private bucket was serving videos through temporary signed URLs embed
 Issue: Anyone who obtained a signed URL could use it until expiry, while unlimited login attempts increased password-guessing exposure.
 Solution: Replace signed URLs with an authenticated same-origin media route, move to random opaque database sessions, add IP and account lockouts, revoke anonymous database function access, and disable caching.
 Justification: Authorization is now checked at the moment each video is requested, leaked media paths are useless without the owner session, and online password guessing is bounded.
+
+2026-07-29
+Problem: The desktop dashboard navigation worked, but the page could not scroll beyond the first viewport.
+Issue: The viewport-height dashboard clipped overflow while its nested workspace grid kept the default automatic minimum height, so the content row expanded instead of becoming a scroll container.
+Solution: Allow the workspace and content row to shrink with min-height zero, contain desktop overflow in the intended content scroller, and restore visible overflow on compact layouts.
+Justification: The dashboard now has one reliable desktop scroll viewport while mobile keeps normal document scrolling and the design system's hidden-scrollbar behavior.
+
+2026-07-29
+Problem: Daily campaign research was scheduled for 16:00 UTC indefinitely, which is 9:00 AM Pacific during daylight saving time and had no 30-day stop condition.
+Issue: Vercel cron expressions are always UTC and do not support an end date, so the endpoint needed its own campaign window guard.
+Solution: Move the cron to 15:00 UTC and allow campaign work only from July 29 through August 27, 2026, inclusive.
+Justification: The active window contains exactly 30 Pacific calendar dates, and calls outside it stop before database or provider work.

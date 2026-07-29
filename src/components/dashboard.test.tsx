@@ -41,6 +41,7 @@ describe("Dashboard production handoff", () => {
           eventType: "daily",
           status: "failed" as const,
           error: "Trend research failed",
+          runVersion: 1,
           claimedAt: new Date().toISOString()
         }
       ]
