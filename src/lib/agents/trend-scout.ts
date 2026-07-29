@@ -1,18 +1,20 @@
 import { z } from "zod";
 import { generateStructured } from "@/lib/ai/gemini";
-import { dailyTrendResearch, type SearchProvider } from "@/lib/search/provider";
+import {
+  dailyTrendResearch,
+  type SearchProvider,
+  type SearchResult
+} from "@/lib/search/provider";
 import {
   AURA_DESKTOP_FACTS,
   AURA_DESKTOP_GUARDRAILS,
   BRAND_VOICE,
   COMPETITOR_CONTEXT
 } from "@/lib/product";
-import type { TrendIdea } from "@/lib/types";
+import type { TrendIdea, TrendSource } from "@/lib/types";
 
 const sourceSchema = z.object({
-  title: z.string(),
-  url: z.string().url(),
-  publishedAt: z.string().optional(),
+  evidenceIndex: z.number().int().positive(),
   note: z.string()
 });
 
@@ -42,13 +44,34 @@ const scoutSchema = z.object({
   ideas: z.array(ideaSchema).length(3)
 });
 
+export function resolveEvidenceSources(
+  references: Array<{ evidenceIndex: number; note: string }>,
+  research: SearchResult[]
+): TrendSource[] {
+  const seen = new Set<number>();
+  return references.map((reference) => {
+    const index = reference.evidenceIndex - 1;
+    const source = research[index];
+    if (!source || seen.has(index)) {
+      throw new Error("Trend Scout returned an invalid or duplicate evidence index");
+    }
+    seen.add(index);
+    return {
+      title: source.title,
+      url: source.url,
+      publishedAt: source.publishedAt,
+      note: reference.note
+    };
+  });
+}
+
 export async function runTrendScout(
   provider?: SearchProvider,
   instruction?: string
 ): Promise<TrendIdea[]> {
   const research = await dailyTrendResearch(provider);
-  const evidence = research
-    .slice(0, 24)
+  const availableResearch = research.slice(0, 24);
+  const evidence = availableResearch
     .map(
       (item, index) =>
         `[${index + 1}] ${item.title}\nURL: ${item.url}\nPublished: ${item.publishedAt ?? "unknown"}\n${item.content}`
@@ -61,7 +84,9 @@ export async function runTrendScout(
 
 Return exactly three distinct daily ideas. Rank them by likely impact and honesty.
 At least one idea should avoid Higgsfield when a meme, real screenshot, screen recording, comparison image, or product demo would work better.
-Use only the evidence URLs below as source links. Never invent a URL.
+For every source, return its evidenceIndex from the numbered evidence below and
+your relevance note. Never return or rewrite a URL. The application resolves the
+index to the exact researched URL.
 
 Aura Desktop facts:
 ${AURA_DESKTOP_FACTS.map((fact) => `- ${fact}`).join("\n")}
@@ -85,11 +110,10 @@ For each idea, explain its specific relevance, honest shelf life, whether Higgsf
     { temperature: 0.55 }
   );
 
-  const allowedUrls = new Set(research.map((item) => item.url));
-  for (const idea of result.ideas) {
-    if (!idea.sources.length || idea.sources.some((source) => !allowedUrls.has(source.url))) {
-      throw new Error("Trend Scout returned a source URL that was not in web research");
-    }
-  }
-  return result.ideas.sort((a, b) => a.rank - b.rank) as TrendIdea[];
+  return result.ideas
+    .map((idea) => ({
+      ...idea,
+      sources: resolveEvidenceSources(idea.sources, availableResearch)
+    }))
+    .sort((a, b) => a.rank - b.rank) as TrendIdea[];
 }

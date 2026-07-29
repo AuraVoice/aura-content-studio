@@ -5,10 +5,12 @@ import { demoSnapshot } from "@/lib/demo";
 import type {
   CampaignSnapshot,
   CampaignStatus,
+  CampaignDayLog,
   CriticEvaluation,
   PromptPackage,
   StudioMessage,
-  TrendIdea
+  TrendIdea,
+  WorkflowRunLog
 } from "@/lib/types";
 
 type Row = Record<string, unknown>;
@@ -482,22 +484,33 @@ export async function saveEvaluation(
 
 export async function getDashboardSnapshot(): Promise<CampaignSnapshot> {
   if (!hasCoreEnvironment()) return demoSnapshot;
-  const { data: campaign, error } = await supabaseAdmin()
+  const { data: campaigns, error } = await supabaseAdmin()
     .from("campaigns")
     .select("*")
     .order("campaign_date", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(30);
   if (error) throw new Error(error.message);
-  if (!campaign) return demoSnapshot;
+  if (!campaigns?.length) return demoSnapshot;
+  const campaign = campaigns[0];
+  const campaignIds = campaigns.map((item) => String(item.id));
 
-  const [ideasResult, promptsResult, uploadsResult, evaluationsResult, messagesResult] =
-    await Promise.all([
-      supabaseAdmin().from("trend_ideas").select("*").eq("campaign_id", campaign.id).order("rank"),
+  const [
+    ideasResult,
+    promptsResult,
+    uploadsResult,
+    evaluationsResult,
+    messagesResult,
+    workflowRunsResult
+  ] = await Promise.all([
+      supabaseAdmin()
+        .from("trend_ideas")
+        .select("*")
+        .in("campaign_id", campaignIds)
+        .order("rank"),
       supabaseAdmin()
         .from("prompt_versions")
         .select("*")
-        .eq("campaign_id", campaign.id)
+        .in("campaign_id", campaignIds)
         .order("version", { ascending: false }),
       supabaseAdmin()
         .from("media_uploads")
@@ -512,25 +525,47 @@ export async function getDashboardSnapshot(): Promise<CampaignSnapshot> {
       supabaseAdmin()
         .from("studio_messages")
         .select("*")
-        .eq("campaign_id", campaign.id)
-        .order("created_at", { ascending: true })
+        .in("campaign_id", campaignIds)
+        .order("created_at", { ascending: true }),
+      supabaseAdmin()
+        .from("workflow_runs")
+        .select("*")
+        .in("campaign_id", campaignIds)
+        .order("claimed_at", { ascending: false })
     ]);
   for (const result of [
     ideasResult,
     promptsResult,
     uploadsResult,
     evaluationsResult,
-    messagesResult
+    messagesResult,
+    workflowRunsResult
   ]) {
     if (result.error) throw new Error(result.error.message);
   }
-  const ideas = (ideasResult.data ?? []).map(mapIdea);
-  const prompts = (promptsResult.data ?? []).map(mapPrompt);
+  const currentId = String(campaign.id);
+  const currentIdeaRows = (ideasResult.data ?? []).filter(
+    (row) => String(row.campaign_id) === currentId
+  );
+  const currentPromptRows = (promptsResult.data ?? []).filter(
+    (row) => String(row.campaign_id) === currentId
+  );
+  const currentMessageRows = (messagesResult.data ?? []).filter(
+    (row) => String(row.campaign_id) === currentId
+  );
+  const currentRunRows = (workflowRunsResult.data ?? []).filter(
+    (row) => String(row.campaign_id) === currentId
+  );
+  const ideas = currentIdeaRows.map(mapIdea);
+  const prompts = currentPromptRows.map(mapPrompt);
+  const messages = currentMessageRows.map(mapMessage);
+  const workflowRuns = currentRunRows.map(mapWorkflowRun);
   const uploadRow = uploadsResult.data?.[0];
   const evaluationRow = uploadRow
     ? evaluationsResult.data?.find((evaluation) => evaluation.upload_id === uploadRow.id)
     : undefined;
   return {
+    dataSource: "live",
     id: campaign.id,
     campaignDate: campaign.campaign_date,
     status: campaign.status as CampaignStatus,
@@ -539,6 +574,36 @@ export async function getDashboardSnapshot(): Promise<CampaignSnapshot> {
     ideas,
     selectedIdea: ideas.find((idea) => idea.id === campaign.selected_idea_id),
     prompt: prompts[0],
+    promptVersions: prompts,
+    workflowRuns,
+    days: campaigns.map((day) => {
+      const dayId = String(day.id);
+      return {
+        id: dayId,
+        campaignDate: String(day.campaign_date),
+        status: day.status as CampaignStatus,
+        currentStep: String(day.current_step),
+        error: day.error ? String(day.error) : undefined,
+        ideas: (ideasResult.data ?? [])
+          .filter((row) => String(row.campaign_id) === dayId)
+          .map(mapIdea),
+        prompts: (promptsResult.data ?? [])
+          .filter((row) => String(row.campaign_id) === dayId)
+          .map(mapPrompt),
+        workflowRuns: (workflowRunsResult.data ?? [])
+          .filter((row) => String(row.campaign_id) === dayId)
+          .map(mapWorkflowRun),
+        messages: (messagesResult.data ?? [])
+          .filter((row) => String(row.campaign_id) === dayId)
+          .map(mapMessage)
+      } satisfies CampaignDayLog;
+    }),
+    telegramDeliveryCount: messages.filter(
+      (message) => message.telegramMessageId !== undefined
+    ).length,
+    lastTelegramDeliveryAt: messages
+      .filter((message) => message.telegramMessageId !== undefined)
+      .at(-1)?.createdAt,
     upload: uploadRow
       ? {
           id: uploadRow.id,
@@ -551,18 +616,37 @@ export async function getDashboardSnapshot(): Promise<CampaignSnapshot> {
     attempts: prompts.map((prompt, index) => ({
       version: prompt.version,
       label:
-        (promptsResult.data?.[index]?.change_request as string | null) ??
+        (currentPromptRows[index]?.change_request as string | null) ??
         (prompt.version === 1 ? "Initial direction" : `Revision ${prompt.version}`),
       status: index === 0 ? "Current" : "Superseded",
-      createdAt: promptsResult.data?.[index]?.created_at as string
+        createdAt: currentPromptRows[index]?.created_at as string
     })),
-    messages: (messagesResult.data ?? []).map((message) => ({
-      id: message.id,
-      direction: message.direction,
-      source: message.source,
-      text: message.text,
-      createdAt: message.created_at
-    }))
+    messages
+  };
+}
+
+function mapMessage(row: Row): StudioMessage {
+  return {
+    id: row.id as string,
+    direction: row.direction as StudioMessage["direction"],
+    source: row.source as StudioMessage["source"],
+    text: row.text as string,
+    createdAt: row.created_at as string,
+    telegramMessageId:
+      row.telegram_message_id === null || row.telegram_message_id === undefined
+        ? undefined
+        : Number(row.telegram_message_id)
+  };
+}
+
+function mapWorkflowRun(row: Row): WorkflowRunLog {
+  return {
+    id: String(row.id),
+    eventType: String(row.event_type),
+    status: row.status as WorkflowRunLog["status"],
+    error: row.error ? String(row.error) : undefined,
+    claimedAt: String(row.claimed_at),
+    completedAt: row.completed_at ? String(row.completed_at) : undefined
   };
 }
 
