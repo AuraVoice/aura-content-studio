@@ -17,6 +17,7 @@ import {
   Video
 } from "lucide-react";
 import { CopyButton } from "./copy-button";
+import { VideoUpload } from "./video-upload";
 import type {
   CampaignSnapshot,
   CriticVerdict,
@@ -74,6 +75,14 @@ function IdeaCard({
 }
 
 function PromptPanel({ prompt }: { prompt: PromptPackage }) {
+  const currentFormat =
+    prompt.clips.length === 3 &&
+    prompt.clips.every(
+      (clip, index) =>
+        clip.clipNumber === index + 1 &&
+        clip.durationSeconds >= 10 &&
+        clip.durationSeconds <= 12
+    );
   return (
     <section className="studio-card prompt-card">
       <div className="card-heading">
@@ -81,47 +90,82 @@ function PromptPanel({ prompt }: { prompt: PromptPackage }) {
           <p className="eyebrow">Prompt Director · v{prompt.version}</p>
           <h2>{prompt.finalConcept}</h2>
         </div>
-        <CopyButton value={prompt.higgsfieldPrompt} label="Copy prompt" />
+        <CopyButton value={prompt.higgsfieldPrompt} label="Copy all 3 prompts" />
       </div>
-      <div className="script-strip">
-        <Mic2 size={17} />
-        <p>{prompt.spokenScript}</p>
-        <span>{prompt.durationSeconds}s</span>
+      <div className="prompt-summary">
+        <span>3 separate clips</span>
+        <span>
+          {currentFormat
+            ? "10 to 12 seconds each"
+            : "Legacy prompt: regenerate for the current 10 to 12 second format"}
+        </span>
+        <span>{prompt.durationSeconds}s total</span>
       </div>
       <div className="prompt-layout">
         <div className="prompt-main">
-          <p className="section-label">Exact Higgsfield prompt</p>
-          <p className="prompt-copy">{prompt.higgsfieldPrompt}</p>
-          <p className="section-label">Shot plan</p>
-          <div className="shot-list">
-            {prompt.shots.map((shot) => (
-              <div className="shot" key={`${shot.startSecond}-${shot.endSecond}`}>
-                <span>
-                  {shot.startSecond}-{shot.endSecond}s
-                </span>
-                <div>
-                  <strong>{shot.camera}</strong>
-                  <p>{shot.visual}</p>
+          <div className="clip-list">
+            {prompt.clips.map((clip) => (
+              <article className="clip-prompt" key={clip.clipNumber}>
+                <div className="clip-heading">
+                  <div>
+                    <p className="section-label">Clip {clip.clipNumber} · {clip.durationSeconds}s</p>
+                    <h3>{clip.purpose}</h3>
+                  </div>
+                  <CopyButton value={clip.higgsfieldPrompt} label={`Copy clip ${clip.clipNumber}`} />
                 </div>
-              </div>
+                <div className="script-strip">
+                  <Mic2 size={17} />
+                  <p>{clip.spokenScript}</p>
+                  <span>
+                    {clip.wordCount} words · about {clip.estimatedSpokenSeconds}s spoken
+                  </span>
+                </div>
+                <p className="section-label">Exact Higgsfield prompt</p>
+                <p className="prompt-copy">{clip.higgsfieldPrompt}</p>
+                <div className="continuity-row">
+                  <div>
+                    <small>Starts from</small>
+                    <p>{clip.continuityIn}</p>
+                  </div>
+                  <div>
+                    <small>Hands off to next clip</small>
+                    <p>{clip.continuityOut}</p>
+                  </div>
+                </div>
+                <p className="section-label">Shot plan</p>
+                <div className="shot-list">
+                  {clip.shots.map((shot) => (
+                    <div className="shot" key={`${clip.clipNumber}-${shot.startSecond}-${shot.endSecond}`}>
+                      <span>
+                        {shot.startSecond}-{shot.endSecond}s
+                      </span>
+                      <div>
+                        <strong>{shot.camera}</strong>
+                        <p>{shot.visual}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </article>
             ))}
           </div>
         </div>
         <aside className="prompt-aside">
-          <p className="section-label">Locked attributes</p>
+          <p className="section-label">Fixed structure</p>
           <div className="lock-list">
-            {Object.entries(prompt.lockedAttributes)
-              .slice(0, 7)
-              .map(([key, value]) => (
-                <div key={key}>
-                  <LockKeyhole size={13} />
-                  <span>
-                    <small>{formatLabel(key)}</small>
-                    {Array.isArray(value) ? value.join(", ") : value}
-                  </span>
-                </div>
-              ))}
+            <div>
+              <LockKeyhole size={13} />
+              <span>
+                <small>Clip count</small>
+                {prompt.lockedAttributes.clipCount} clips
+              </span>
+            </div>
           </div>
+          <p className="section-label">Continuity method</p>
+          <p className="aside-note">
+            Export each clip&apos;s final frame and use it as the next clip&apos;s start
+            frame when the selected Higgsfield model supports frame references.
+          </p>
           <p className="section-label">Failure watch</p>
           <ul className="failure-list">
             {prompt.failurePoints.map((point) => (
@@ -264,10 +308,11 @@ export function Dashboard({ snapshot }: { snapshot: CampaignSnapshot }) {
               ) : (
                 <div className="video-empty">
                   <div><Film size={26} /></div>
-                  <strong>Waiting for your upload</strong>
-                  <p>Generate manually in Higgsfield, then send the video to the Telegram bot.</p>
+                  <strong>Upload your finished cut</strong>
+                  <p>Generate manually in Higgsfield, blend the three clips, then upload the video here.</p>
                 </div>
               )}
+              <VideoUpload />
               <div className="media-meta">
                 <span>{snapshot.upload?.fileName ?? "No file yet"}</span>
                 <span>Private storage</span>

@@ -5,7 +5,7 @@ import {
   AURA_DESKTOP_GUARDRAILS,
   BRAND_VOICE
 } from "@/lib/product";
-import type { LockedAttributes, PromptPackage, TrendIdea } from "@/lib/types";
+import type { PromptPackage, TrendIdea } from "@/lib/types";
 
 const shotSchema = z.object({
   startSecond: z.number().min(0),
@@ -16,25 +16,32 @@ const shotSchema = z.object({
   overlay: z.string().optional()
 });
 
+const clipSchema = z.object({
+  clipNumber: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  purpose: z.string(),
+  durationSeconds: z.number().int().min(10).max(12),
+  spokenScript: z.string(),
+  estimatedSpokenSeconds: z.number(),
+  wordCount: z.number().int(),
+  higgsfieldPrompt: z.string(),
+  continuityIn: z.string(),
+  continuityOut: z.string(),
+  shots: z.array(shotSchema).min(1)
+});
+
 const promptSchema = z.object({
   finalConcept: z.string(),
   hook: z.string(),
   spokenScript: z.string(),
-  shots: z.array(shotSchema).min(1),
+  clips: z.array(clipSchema).length(3),
   higgsfieldPrompt: z.string(),
   negativeConstraints: z.array(z.string()).min(4),
-  durationSeconds: z.number().int().min(5).max(60),
+  durationSeconds: z.number().int().min(30).max(36),
   recommendedModel: z.string(),
   failurePoints: z.array(z.string()).min(2),
   lockedAttributes: z.object({
-    actor: z.string(),
-    clothing: z.string(),
-    environment: z.string(),
-    lighting: z.string(),
-    durationSeconds: z.number().int(),
-    spokenScript: z.string(),
-    productClaims: z.array(z.string())
-  }).catchall(z.union([z.string(), z.number(), z.array(z.string())])),
+    clipCount: z.literal(3)
+  }),
   validation: z.object({
     estimatedSpokenSeconds: z.number(),
     dialogueFits: z.boolean(),
@@ -54,74 +61,150 @@ function normalized(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function replaceCameraDirections(
+  prompt: string,
+  previousShots: PromptPackage["clips"][number]["shots"],
+  draftShots: PromptPackage["clips"][number]["shots"]
+): string {
+  let revised = prompt;
+  let replaced = false;
+  previousShots.forEach((shot, index) => {
+    const nextCamera = draftShots[index]?.camera;
+    if (nextCamera && revised.includes(shot.camera)) {
+      revised = revised.replaceAll(shot.camera, nextCamera);
+      replaced = true;
+    }
+  });
+  if (replaced) return revised;
+  return `${prompt}\nCamera revision only: ${draftShots.map((shot) => shot.camera).join("; ")}. Keep every other direction unchanged.`;
+}
+
+function replaceScriptDirection(
+  prompt: string,
+  previousScript: string,
+  nextScript: string
+): string {
+  if (prompt.includes(previousScript)) {
+    return prompt.replaceAll(previousScript, nextScript);
+  }
+  return `${prompt}\nSpoken dialogue revision only: "${nextScript}" Keep every other direction unchanged.`;
+}
+
+function replaceDurationDirection(
+  prompt: string,
+  previousDuration: number,
+  nextDuration: number
+): string {
+  return prompt
+    .replaceAll(`${previousDuration}-second`, `${nextDuration}-second`)
+    .replaceAll(`${previousDuration} seconds`, `${nextDuration} seconds`);
+}
+
 export function applyLocks(
   draft: z.infer<typeof promptSchema>,
   previous: PromptPackage | undefined,
   changeRequest: string | undefined
 ): z.infer<typeof promptSchema> {
   if (!previous || !changeRequest) return draft;
+  const previousUsesCurrentFormat =
+    previous.clips.length === 3 &&
+    previous.clips.every(
+      (clip, index) =>
+        clip.clipNumber === index + 1 &&
+        clip.durationSeconds >= 10 &&
+        clip.durationSeconds <= 12
+    );
+  if (!previousUsesCurrentFormat) {
+    return { ...draft, lockedAttributes: { clipCount: 3 } };
+  }
   const request = normalized(changeRequest);
   const onlyMatch = request.match(/change only (?:the )?(.+)/);
   if (!onlyMatch) {
-    const lockedAttributes = { ...draft.lockedAttributes };
-    const sameAttributeAliases: Array<[string, keyof LockedAttributes]> = [
-      ["actor", "actor"],
-      ["outfit", "clothing"],
-      ["clothing", "clothing"],
-      ["environment", "environment"],
-      ["room", "environment"],
-      ["lighting", "lighting"],
-      ["script", "spokenScript"],
-      ["duration", "durationSeconds"]
-    ];
-    for (const [phrase, key] of sameAttributeAliases) {
-      if (request.includes(`same ${phrase}`)) {
-        lockedAttributes[key] = previous.lockedAttributes[key];
-      }
-    }
     return {
       ...draft,
-      spokenScript: request.includes("same script")
-        ? previous.spokenScript
-        : draft.spokenScript,
-      durationSeconds: request.includes("same duration")
-        ? previous.durationSeconds
-        : draft.durationSeconds,
-      lockedAttributes
+      lockedAttributes: { clipCount: 3 }
     };
   }
   const allowed = onlyMatch[1];
-  const locks = previous.lockedAttributes;
-  const preserve = (key: keyof LockedAttributes) => !allowed.includes(normalized(String(key)));
-  const lockedAttributes = { ...draft.lockedAttributes };
-  for (const [key, value] of Object.entries(locks)) {
-    if (preserve(key)) lockedAttributes[key] = value;
-  }
   const cameraOnly = allowed.includes("camera") || allowed.includes("angle");
-  const shots = cameraOnly
-    ? previous.shots.map((shot, index) => ({
-        ...shot,
-        camera: draft.shots[index]?.camera ?? shot.camera
-      }))
-    : draft.shots;
+  const scriptOnly = allowed.includes("script") || allowed.includes("dialogue");
+  const durationOnly = allowed.includes("duration") || allowed.includes("length");
+  const clips = previous.clips.map((clip, clipIndex) => {
+    const draftClip = draft.clips[clipIndex] ?? clip;
+    if (cameraOnly) {
+      return {
+        ...clip,
+        higgsfieldPrompt: replaceCameraDirections(
+          clip.higgsfieldPrompt,
+          clip.shots,
+          draftClip.shots
+        ),
+        shots: clip.shots.map((shot, shotIndex) => ({
+          ...shot,
+          camera: draftClip.shots[shotIndex]?.camera ?? shot.camera
+        }))
+      };
+    }
+    if (scriptOnly) {
+      return {
+        ...clip,
+        spokenScript: draftClip.spokenScript,
+        estimatedSpokenSeconds: draftClip.estimatedSpokenSeconds,
+        wordCount: draftClip.wordCount,
+        higgsfieldPrompt: replaceScriptDirection(
+          clip.higgsfieldPrompt,
+          clip.spokenScript,
+          draftClip.spokenScript
+        ),
+        shots: clip.shots.map((shot, shotIndex) => ({
+          ...shot,
+          dialogue: draftClip.shots[shotIndex]?.dialogue ?? draftClip.spokenScript
+        }))
+      };
+    }
+    if (durationOnly) {
+      const nextDuration = draftClip.durationSeconds;
+      const ratio = nextDuration / clip.durationSeconds;
+      return {
+        ...clip,
+        durationSeconds: nextDuration,
+        higgsfieldPrompt: replaceDurationDirection(
+          clip.higgsfieldPrompt,
+          clip.durationSeconds,
+          nextDuration
+        ),
+        shots: clip.shots.map((shot, shotIndex) => ({
+          ...shot,
+          startSecond: shotIndex === 0 ? 0 : Number((shot.startSecond * ratio).toFixed(2)),
+          endSecond:
+            shotIndex === clip.shots.length - 1
+              ? nextDuration
+              : Number((shot.endSecond * ratio).toFixed(2))
+        }))
+      };
+    }
+    return clip;
+  });
   return {
-    ...draft,
+    ...previous,
     finalConcept: allowed.includes("concept") ? draft.finalConcept : previous.finalConcept,
     hook: allowed.includes("hook") ? draft.hook : previous.hook,
-    spokenScript:
-      allowed.includes("script") || allowed.includes("dialogue")
-        ? draft.spokenScript
-        : previous.spokenScript,
-    durationSeconds: allowed.includes("duration")
-      ? draft.durationSeconds
-      : previous.durationSeconds,
-    shots,
-    negativeConstraints: cameraOnly
-      ? previous.negativeConstraints
-      : draft.negativeConstraints,
-    recommendedModel: cameraOnly ? previous.recommendedModel : draft.recommendedModel,
-    failurePoints: cameraOnly ? previous.failurePoints : draft.failurePoints,
-    lockedAttributes
+    spokenScript: clips.map((clip) => clip.spokenScript).join(" "),
+    durationSeconds: clips.reduce((sum, clip) => sum + clip.durationSeconds, 0),
+    clips,
+    higgsfieldPrompt: clips
+      .map((clip) => `CLIP ${clip.clipNumber}\n${clip.higgsfieldPrompt}`)
+      .join("\n\n"),
+    negativeConstraints: allowed.includes("constraint")
+      ? draft.negativeConstraints
+      : previous.negativeConstraints,
+    recommendedModel: allowed.includes("model")
+      ? draft.recommendedModel
+      : previous.recommendedModel,
+    failurePoints: allowed.includes("failure")
+      ? draft.failurePoints
+      : previous.failurePoints,
+    lockedAttributes: { clipCount: 3 }
   };
 }
 
@@ -162,12 +245,21 @@ Voice:
 ${BRAND_VOICE.map((rule) => `- ${rule}`).join("\n")}
 
 Requirements:
-- Dialogue must fit naturally in the duration at about 2.35 words per second.
-- Every shot needs explicit lens or field of view, camera height, framing, movement, and subject position.
-- Keep actor, clothing, environment, lighting, and product representation consistent.
+- Return exactly 3 separately generated clips. Every clip must be 10, 11, or 12 seconds. Never create a clip longer than 12 seconds.
+- Give every clip its own complete, directly copyable Higgsfield prompt. The combined higgsfieldPrompt must label and include all 3 prompts.
+- Cast an adult white blonde woman in her mid-to-late twenties. She should look striking, glamorous, confident, and flirtatious while remaining tasteful and platform-safe. Style her in a fashionable fitted sleeveless top.
+- Do not force a desk scene. Choose a natural conversational setting that fits the concept, such as a couch, kitchen counter, bright studio corner, co-working lounge, or a creator moving through her space.
+- Dialogue must fit naturally in each clip at about 2.35 words per second, with at least 1 second left for breath, reaction, or movement. A 10-second clip should normally contain no more than 21 spoken words.
+- Build a hook, demonstration, and payoff arc across the 3 clips. Each spoken line must feel complete while leading naturally into the next.
+- Every shot needs explicit lens or field of view, camera height, angle, framing, camera movement, subject position, lighting, and physical action.
+- Repeat the same adult creator description and wardrobe in all 3 prompts for continuity, but do not store casting, clothing, environment, lighting, script, or duration as locked attributes.
+- Define continuityIn and continuityOut for every clip. Clip 1 must create a clean final frame for clip 2. Clip 2 must start from clip 1's final frame and create a clean final frame for clip 3. Clip 3 must start from clip 2's final frame.
+- Tell the owner to use each prior clip's exported final frame as the next clip's start-frame reference when the selected model exposes start and end frames.
+- Prefer one motivated camera move per shot. Use combinations such as a subtle handheld push-in, shoulder-height three-quarter angle, lateral track, gentle orbit, or natural reframing. Avoid random motion and excessive cuts.
+- Keep product representation consistent and make each cut happen on matched motion, eyeline, or an object passing frame.
 - A Higgsfield prompt must never fabricate detailed Aura interface text. Use a compositing-safe blank or abstract overlay when needed.
 - Speaking should sound conversational and energetic, not slow or scripted.
-- Record every invariant in lockedAttributes.
+- lockedAttributes must contain only {"clipCount": 3}.
 - If the instruction requests one change, change only that attribute and copy everything else from the previous package.
 - recommendedModel should describe the Higgsfield capability needed, since model availability varies by subscription.
 - Show only a Windows desktop environment and product experience.`,
@@ -175,38 +267,67 @@ Requirements:
   );
 
   const locked = applyLocks(draft, input.previous, input.instruction);
-  const estimated = estimateSpeech(locked.spokenScript);
+  const clips = locked.clips.map((clip, index) => {
+    const wordCount = clip.spokenScript.trim().split(/\s+/).filter(Boolean).length;
+    const estimatedSpokenSeconds = estimateSpeech(clip.spokenScript);
+    const shotsValid =
+      clip.shots[0]?.startSecond === 0 &&
+      Math.abs((clip.shots.at(-1)?.endSecond ?? 0) - clip.durationSeconds) < 0.25 &&
+      clip.shots.every(
+        (shot, shotIndex) =>
+          shot.startSecond < shot.endSecond &&
+          (shotIndex === 0 ||
+            Math.abs(shot.startSecond - clip.shots[shotIndex - 1].endSecond) < 0.25)
+      );
+    if (clip.clipNumber !== index + 1) {
+      throw new Error("Prompt Director returned clips out of order");
+    }
+    if (!shotsValid) {
+      throw new Error(`Prompt Director returned a discontinuous plan for clip ${index + 1}`);
+    }
+    if (estimatedSpokenSeconds > clip.durationSeconds - 1) {
+      throw new Error(
+        `Clip ${index + 1} dialogue needs about ${estimatedSpokenSeconds}s but only ${clip.durationSeconds - 1}s is available for speech`
+      );
+    }
+    return {
+      ...clip,
+      wordCount,
+      estimatedSpokenSeconds
+    };
+  });
+  const durationSeconds = clips.reduce((sum, clip) => sum + clip.durationSeconds, 0);
+  const spokenScript = clips.map((clip) => clip.spokenScript).join(" ");
+  const estimated = clips.reduce(
+    (sum, clip) => sum + clip.estimatedSpokenSeconds,
+    0
+  );
   const repeated = (input.recentHooks ?? []).some(
     (hook) => normalized(hook) === normalized(locked.hook)
   );
-  const shotsValid =
-    locked.shots[0]?.startSecond === 0 &&
-    Math.abs((locked.shots.at(-1)?.endSecond ?? 0) - locked.durationSeconds) < 0.25 &&
-    locked.shots.every(
-      (shot, index) =>
-        shot.startSecond < shot.endSecond &&
-        (index === 0 || Math.abs(shot.startSecond - locked.shots[index - 1].endSecond) < 0.25)
-    );
-  if (!shotsValid) throw new Error("Prompt Director returned a discontinuous shot plan");
-  if (estimated > locked.durationSeconds) {
-    throw new Error(
-      `Prompt Director dialogue needs about ${estimated}s but duration is ${locked.durationSeconds}s`
-    );
-  }
   if (locked.validation.contradictions.length) {
     throw new Error(`Prompt contradictions: ${locked.validation.contradictions.join(", ")}`);
   }
   if (repeated) {
     throw new Error("Prompt Director repeated a recent hook");
   }
-  return {
+  const finalized = promptSchema.parse({
     ...locked,
-    version: nextVersion,
+    clips,
+    spokenScript,
+    higgsfieldPrompt: clips
+      .map((clip) => `CLIP ${clip.clipNumber}\n${clip.higgsfieldPrompt}`)
+      .join("\n\n"),
+    durationSeconds,
+    lockedAttributes: { clipCount: 3 },
     validation: {
       ...locked.validation,
       estimatedSpokenSeconds: estimated,
-      dialogueFits: estimated <= locked.durationSeconds,
+      dialogueFits: clips.every(
+        (clip) => clip.estimatedSpokenSeconds <= clip.durationSeconds - 1
+      ),
       repeatedHook: repeated
     }
-  };
+  });
+  return { ...finalized, version: nextVersion };
 }
