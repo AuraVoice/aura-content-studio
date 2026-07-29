@@ -52,27 +52,27 @@ function formatPrompt(state: WorkflowValue): string {
   return [
     `Direction v${prompt.version}: ${prompt.finalConcept}`,
     `Hook: ${prompt.hook}`,
-    `Duration: ${prompt.durationSeconds}s`,
+    `Structure: 3 separate clips, ${prompt.durationSeconds}s total`,
     `Recommended model: ${prompt.recommendedModel}`,
     "",
-    "Spoken script:",
-    prompt.spokenScript,
-    "",
-    "Shot plan:",
-    ...prompt.shots.map(
-      (shot) =>
-        `${shot.startSecond}-${shot.endSecond}s | ${shot.camera}\n${shot.visual}${shot.dialogue ? `\nDialogue: ${shot.dialogue}` : ""}`
+    ...prompt.clips.flatMap(
+      (clip) => [
+        `CLIP ${clip.clipNumber} | ${clip.durationSeconds}s | ${clip.wordCount} words | about ${clip.estimatedSpokenSeconds}s spoken`,
+        clip.purpose,
+        `Dialogue: ${clip.spokenScript}`,
+        `Continuity in: ${clip.continuityIn}`,
+        `Continuity out: ${clip.continuityOut}`,
+        "Exact Higgsfield prompt:",
+        clip.higgsfieldPrompt,
+        ""
+      ]
     ),
-    "",
-    "Exact Higgsfield prompt:",
-    prompt.higgsfieldPrompt,
-    "",
     "Negative constraints:",
     prompt.negativeConstraints.map((item) => `• ${item}`).join("\n"),
     "",
-    `Locked for revisions: ${Object.keys(prompt.lockedAttributes).join(", ")}`,
+    "Fixed structure: 3 clips. No casting, wardrobe, location, lighting, script, or duration attributes are locked.",
     "",
-    "Generate manually in Higgsfield, then upload the result here. Aura Content Studio will never spend a generation credit for you."
+    "Generate manually in Higgsfield. Export each clip's final frame and use it as the next clip's start frame when the selected model supports it. Blend the three clips, then upload the finished cut in the dashboard or send it to Telegram. Aura Content Studio will never spend a generation credit for you."
   ].join("\n");
 }
 

@@ -191,7 +191,7 @@ export async function savePrompt(
     final_concept: prompt.finalConcept,
     hook: prompt.hook,
     spoken_script: prompt.spokenScript,
-    shots: prompt.shots,
+    shots: prompt.clips,
     higgsfield_prompt: prompt.higgsfieldPrompt,
     negative_constraints: prompt.negativeConstraints,
     duration_seconds: prompt.durationSeconds,
@@ -221,6 +221,20 @@ export async function getLatestPrompt(campaignId: string): Promise<PromptPackage
     .eq("campaign_id", campaignId)
     .order("version", { ascending: false })
     .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapPrompt(data) : null;
+}
+
+export async function getPromptVersion(
+  campaignId: string,
+  version: number
+): Promise<PromptPackage | null> {
+  const { data, error } = await supabaseAdmin()
+    .from("prompt_versions")
+    .select("*")
+    .eq("campaign_id", campaignId)
+    .eq("version", version)
     .maybeSingle();
   if (error) throw new Error(error.message);
   return data ? mapPrompt(data) : null;
@@ -300,6 +314,123 @@ export async function saveUpload(input: {
     .select("*")
     .single();
   return assertData(data, error);
+}
+
+export async function findUploadBySha(
+  campaignId: string,
+  sha256: string
+): Promise<Row | null> {
+  const { data, error } = await supabaseAdmin()
+    .from("media_uploads")
+    .select("*")
+    .eq("campaign_id", campaignId)
+    .eq("sha256", sha256)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as Row | null;
+}
+
+export async function createBrowserUploadToken(storagePath: string): Promise<{
+  path: string;
+  token: string;
+  signedUrl: string;
+}> {
+  const { data, error } = await supabaseAdmin().storage
+    .from(env().SUPABASE_STORAGE_BUCKET)
+    .createSignedUploadUrl(storagePath, { upsert: false });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function saveBrowserUpload(input: {
+  campaignId: string;
+  promptVersion: number;
+  storagePath: string;
+  fileName: string;
+  mimeType: string;
+  byteSize: number;
+  sha256: string;
+}) {
+  const bucket = supabaseAdmin().storage.from(env().SUPABASE_STORAGE_BUCKET);
+  const { data: object, error: objectError } = await bucket
+    .info(input.storagePath);
+  if (objectError || !object) {
+    throw new Error(objectError?.message ?? "Uploaded video was not found in storage");
+  }
+  if (object.size !== input.byteSize) {
+    throw new Error("Uploaded video size does not match the selected file");
+  }
+  if (object.contentType && object.contentType !== input.mimeType) {
+    throw new Error("Uploaded video type does not match the selected file");
+  }
+  const { data: blob, error: downloadError } = await bucket.download(input.storagePath);
+  if (downloadError || !blob) {
+    throw new Error(downloadError?.message ?? "Uploaded video could not be verified");
+  }
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const verifiedSha = createHash("sha256").update(bytes).digest("hex");
+  if (verifiedSha !== input.sha256) {
+    await bucket.remove([input.storagePath]);
+    throw new Error("Uploaded video checksum does not match the selected file");
+  }
+  const existing = await findUploadBySha(input.campaignId, verifiedSha);
+  if (existing) {
+    if (existing.storage_path !== input.storagePath) {
+      await bucket.remove([input.storagePath]);
+    }
+    return existing;
+  }
+  const { data, error } = await supabaseAdmin()
+    .from("media_uploads")
+    .insert({
+      campaign_id: input.campaignId,
+      prompt_version: input.promptVersion,
+      telegram_file_id: null,
+      telegram_file_unique_id: null,
+      storage_path: input.storagePath,
+      file_name: input.fileName,
+      mime_type: input.mimeType,
+      byte_size: input.byteSize,
+      sha256: verifiedSha
+    })
+    .select("*")
+    .single();
+  if (error?.code === "23505") {
+    await bucket.remove([input.storagePath]);
+    const raced = await findUploadBySha(input.campaignId, verifiedSha);
+    if (raced) return raced;
+  }
+  return assertData(data, error);
+}
+
+export async function getEvaluationByUploadId(uploadId: string): Promise<Row | null> {
+  const { data, error } = await supabaseAdmin()
+    .from("evaluations")
+    .select("*")
+    .eq("upload_id", uploadId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as Row | null;
+}
+
+export async function nextUploadReviewKey(
+  campaignId: string,
+  sha256: string,
+  promptVersion: number
+): Promise<string> {
+  const prefix = `dashboard-review:${campaignId}:${sha256}:${promptVersion}:`;
+  const { data, error } = await supabaseAdmin()
+    .from("workflow_runs")
+    .select("idempotency_key,status,claimed_at")
+    .like("idempotency_key", `${prefix}%`)
+    .order("claimed_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  const latest = data?.[0];
+  const claimIsFresh =
+    latest?.status === "claimed" &&
+    Date.now() - new Date(String(latest.claimed_at)).getTime() < 10 * 60 * 1000;
+  if (claimIsFresh) return String(latest.idempotency_key);
+  return `${prefix}${(data?.length ?? 0) + 1}`;
 }
 
 export async function downloadUpload(uploadId: string): Promise<{
@@ -396,7 +527,9 @@ export async function getDashboardSnapshot(): Promise<CampaignSnapshot> {
   const ideas = (ideasResult.data ?? []).map(mapIdea);
   const prompts = (promptsResult.data ?? []).map(mapPrompt);
   const uploadRow = uploadsResult.data?.[0];
-  const evaluationRow = evaluationsResult.data?.[0];
+  const evaluationRow = uploadRow
+    ? evaluationsResult.data?.find((evaluation) => evaluation.upload_id === uploadRow.id)
+    : undefined;
   return {
     id: campaign.id,
     campaignDate: campaign.campaign_date,
@@ -451,21 +584,70 @@ function mapIdea(row: Row): TrendIdea {
 }
 
 function mapPrompt(row: Row): PromptPackage {
+  const stored = row.shots as unknown;
+  const clips = Array.isArray(stored) && stored.every(
+    (item) =>
+      typeof item === "object" &&
+      item !== null &&
+      "clipNumber" in item &&
+      "higgsfieldPrompt" in item
+  )
+    ? stored as PromptPackage["clips"]
+    : legacyClips(row, Array.isArray(stored) ? stored : []);
   return {
     id: row.id as string,
     version: row.version as number,
     finalConcept: row.final_concept as string,
     hook: row.hook as string,
     spokenScript: row.spoken_script as string,
-    shots: row.shots as PromptPackage["shots"],
+    clips,
     higgsfieldPrompt: row.higgsfield_prompt as string,
     negativeConstraints: row.negative_constraints as string[],
     durationSeconds: row.duration_seconds as number,
     recommendedModel: row.recommended_model as string,
     failurePoints: row.failure_points as string[],
-    lockedAttributes: row.locked_attributes as PromptPackage["lockedAttributes"],
+    lockedAttributes: { clipCount: 3 },
     validation: row.validation as PromptPackage["validation"]
   };
+}
+
+function legacyClips(row: Row, storedShots: unknown[]): PromptPackage["clips"] {
+  const fallbackShot = {
+    startSecond: 0,
+    endSecond: Number(row.duration_seconds),
+    visual: "Legacy production direction",
+    dialogue: String(row.spoken_script),
+    camera: "Legacy camera direction"
+  };
+  const source = storedShots.length ? storedShots : [fallbackShot];
+  return [0, 1, 2].map((index) => {
+    const shot = source[Math.min(index, source.length - 1)] as PromptPackage["clips"][number]["shots"][number];
+    const durationSeconds = Math.max(
+      1,
+      Math.round(Number(shot.endSecond) - Number(shot.startSecond))
+    );
+    const spokenScript = String(shot.dialogue || row.spoken_script);
+    return {
+      clipNumber: (index + 1) as 1 | 2 | 3,
+      purpose: `Legacy clip ${index + 1}. Regenerate this prompt to use the current 10 to 12 second format.`,
+      durationSeconds,
+      spokenScript,
+      estimatedSpokenSeconds: Math.ceil(
+        spokenScript.trim().split(/\s+/).filter(Boolean).length / 2.35
+      ),
+      wordCount: spokenScript.trim().split(/\s+/).filter(Boolean).length,
+      higgsfieldPrompt: `${String(row.higgsfield_prompt)} Clip ${index + 1}: ${String(shot.visual)} Camera: ${String(shot.camera)}`,
+      continuityIn:
+        index === 0
+          ? "Legacy prompt has no start-frame direction."
+          : `Continue from legacy clip ${index}.`,
+      continuityOut:
+        index === 2
+          ? "Finish on a clean final frame."
+          : `Create a clean final frame for legacy clip ${index + 2}.`,
+      shots: [{ ...shot, startSecond: 0, endSecond: durationSeconds }]
+    };
+  });
 }
 
 function mapEvaluation(row: Row): CriticEvaluation {

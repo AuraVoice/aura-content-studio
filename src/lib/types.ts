@@ -50,15 +50,21 @@ export interface Shot {
   overlay?: string;
 }
 
-export interface LockedAttributes {
-  actor: string;
-  clothing: string;
-  environment: string;
-  lighting: string;
+export interface ClipPrompt {
+  clipNumber: 1 | 2 | 3;
+  purpose: string;
   durationSeconds: number;
   spokenScript: string;
-  productClaims: string[];
-  [key: string]: string | number | string[];
+  estimatedSpokenSeconds: number;
+  wordCount: number;
+  higgsfieldPrompt: string;
+  continuityIn: string;
+  continuityOut: string;
+  shots: Shot[];
+}
+
+export interface LockedAttributes {
+  clipCount: 3;
 }
 
 export interface PromptPackage {
@@ -67,7 +73,7 @@ export interface PromptPackage {
   finalConcept: string;
   hook: string;
   spokenScript: string;
-  shots: Shot[];
+  clips: ClipPrompt[];
   higgsfieldPrompt: string;
   negativeConstraints: string[];
   durationSeconds: number;
