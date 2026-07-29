@@ -97,7 +97,7 @@ Open `http://localhost:3000`. Without Supabase credentials the code can build an
 
 | Variable | Source | Used for |
 |---|---|---|
-| `STUDIO_USERNAME`, `STUDIO_PASSWORD` | Choose them. Use a password-manager-generated password or five-word passphrase of at least 16 characters | One-owner dashboard login and session key derivation |
+| `STUDIO_USERNAME`, `STUDIO_PASSWORD` | Choose them. The password must be at least 8 characters | One-owner dashboard login and session key derivation |
 | `TELEGRAM_BOT_TOKEN` | Telegram `@BotFather` via `/newbot` | Bot API |
 | `TELEGRAM_WEBHOOK_SECRET` | Generate a random 32+ character value | Telegram webhook verification |
 | `TELEGRAM_ALLOWED_CHAT_ID` | Send the bot a message, then inspect `getUpdates` | Owner allowlist |

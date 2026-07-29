@@ -9,3 +9,5 @@ coverage/
 *.tsbuildinfo
 graphify-out/
 .DS_Store
+
+.vercel

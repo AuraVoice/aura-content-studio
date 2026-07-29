@@ -3,7 +3,7 @@ import { z } from "zod";
 const serverSchema = z.object({
   APP_URL: z.string().url().default("http://localhost:3000"),
   STUDIO_USERNAME: z.string().min(3),
-  STUDIO_PASSWORD: z.string().min(16),
+  STUDIO_PASSWORD: z.string().min(8),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   TELEGRAM_WEBHOOK_SECRET: z.string().min(16),
   TELEGRAM_ALLOWED_CHAT_ID: z.string().min(1),
