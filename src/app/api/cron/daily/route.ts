@@ -3,13 +3,9 @@ import { campaignScheduleStatus } from "@/lib/campaign-schedule";
 import { env } from "@/lib/env";
 import {
   claimDailyCampaign,
-  claimWorkflowRun,
-  completeWorkflowRun,
-  localDate,
-  saveMessage
+  localDate
 } from "@/lib/repository";
-import { sendTelegramMessage } from "@/lib/telegram/client";
-import { invokeWorkflow } from "@/lib/workflow/service";
+import { executeResearchRun } from "@/lib/workflow/research-run";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,41 +26,20 @@ export async function GET(request: NextRequest) {
   }
   const campaign = await claimDailyCampaign(date);
   const campaignId = campaign.id as string;
-  const run = await claimWorkflowRun({
-    key: `daily:${date}`,
-    campaignId,
-    runVersion: Number(campaign.run_version),
-    eventType: "daily"
-  });
-  if (!run.is_new) {
-    return NextResponse.json({ ok: true, duplicate: true, status: run.status });
-  }
   try {
-    const result = await invokeWorkflow({
-      campaignId,
-      campaignDate: date,
-      threadId: campaign.thread_id as string,
-      runVersion: Number(campaign.run_version),
-      eventType: "daily"
+    const result = await executeResearchRun({
+      campaign: {
+        id: campaignId,
+        campaign_date: date,
+        thread_id: String(campaign.thread_id),
+        run_version: Number(campaign.run_version)
+      },
+      idempotencyKey: `daily:${date}`,
+      workflowEventType: "daily"
     });
-    for (const text of result.messages) {
-      const sent = await sendTelegramMessage(env().TELEGRAM_ALLOWED_CHAT_ID, text);
-      await saveMessage({
-        campaignId,
-        telegramMessageId: sent[0]?.message_id,
-        direction: "outbound",
-        source: "orchestrator",
-        text
-      });
-    }
-    await completeWorkflowRun(run.id, "completed", {
-      status: result.state.status,
-      interrupted: result.interrupted
-    });
-    return NextResponse.json({ ok: true, campaignId, status: result.state.status });
+    return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     const text = error instanceof Error ? error.message : "Unknown daily workflow error";
-    await completeWorkflowRun(run.id, "failed", undefined, text);
     return NextResponse.json({ ok: false, error: text }, { status: 500 });
   }
 }

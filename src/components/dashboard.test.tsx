@@ -17,6 +17,8 @@ describe("Dashboard production handoff", () => {
     expect(html).toContain("Only the three-clip structure is fixed");
     expect(html).toContain("Chat from the dashboard or Telegram");
     expect(html).toContain("Today’s cron");
+    expect(html).toContain("Run research now");
+    expect(html).toContain("Run as often as needed");
     expect(html).toContain("Windows productivity conversation");
     expect(html).toContain("Research and production log");
     expect(html).not.toContain("Studio sections");

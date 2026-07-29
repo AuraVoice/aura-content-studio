@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { CopyButton } from "./copy-button";
 import { DashboardChat } from "./dashboard-chat";
+import { ManualResearchButton } from "./manual-research-button";
 import { VideoUpload } from "./video-upload";
 import type {
   CampaignDayLog,
@@ -324,6 +325,7 @@ export function Dashboard({ snapshot }: { snapshot: CampaignSnapshot }) {
                   : "No daily workflow run exists for this campaign"}
               </small>
               {dailyRun?.error ? <p>{dailyRun.error}</p> : null}
+              <ManualResearchButton />
             </article>
             <article className="operation-card">
               <p className="section-label">Telegram delivery</p>

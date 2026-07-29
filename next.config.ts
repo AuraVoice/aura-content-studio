@@ -41,6 +41,10 @@ const nextConfig: NextConfig = {
       {
         source: "/api/chat",
         headers: [{ key: "Cache-Control", value: "private, no-store, max-age=0" }]
+      },
+      {
+        source: "/api/research/:path*",
+        headers: [{ key: "Cache-Control", value: "private, no-store, max-age=0" }]
       }
     ];
   },
