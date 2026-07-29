@@ -132,9 +132,32 @@ export interface StudioMessage {
   source: "telegram" | "dashboard" | "orchestrator";
   text: string;
   createdAt: string;
+  telegramMessageId?: number;
+}
+
+export interface WorkflowRunLog {
+  id: string;
+  eventType: string;
+  status: "claimed" | "completed" | "failed" | "stale";
+  error?: string;
+  claimedAt: string;
+  completedAt?: string;
+}
+
+export interface CampaignDayLog {
+  id: string;
+  campaignDate: string;
+  status: CampaignStatus;
+  currentStep: string;
+  error?: string;
+  ideas: TrendIdea[];
+  prompts: PromptPackage[];
+  workflowRuns: WorkflowRunLog[];
+  messages: StudioMessage[];
 }
 
 export interface CampaignSnapshot {
+  dataSource: "live" | "demo";
   id: string;
   campaignDate: string;
   status: CampaignStatus;
@@ -143,6 +166,11 @@ export interface CampaignSnapshot {
   ideas: TrendIdea[];
   selectedIdea?: TrendIdea;
   prompt?: PromptPackage;
+  promptVersions: PromptPackage[];
+  workflowRuns: WorkflowRunLog[];
+  days: CampaignDayLog[];
+  telegramDeliveryCount: number;
+  lastTelegramDeliveryAt?: string;
   upload?: {
     id: string;
     fileName: string;

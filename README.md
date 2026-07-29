@@ -65,6 +65,24 @@ Cron retry or duplicate Telegram update
 5. The owner generates manually in Higgsfield and uploads the result to Telegram.
 6. The upload is hashed, stored privately, evaluated by Gemini, and shown with its verdict in Telegram and the dashboard.
 
+### Manual research runs
+
+The authenticated dashboard includes **Run research now** in the Today’s cron card.
+It can be used at any time, including more than once on the same day and outside the
+scheduled campaign window.
+
+Each click:
+
+1. Creates a unique `manual-research:<campaign>:<request>` workflow claim.
+2. Starts a fresh LangGraph thread for the latest research pass.
+3. Replaces that day’s three ranked ideas with newly sourced results.
+4. Stores the run status and any error in the dashboard log.
+5. Sends the new idea list to Telegram for selection.
+
+Browser retries of the same click reuse its request identifier and cannot duplicate the
+provider call. A later click receives a new identifier and intentionally starts another run.
+The scheduled `/api/cron/daily` endpoint keeps its once-per-date idempotency behavior.
+
 ### Duplicate and cancellation path
 
 If Vercel retries a cron or Telegram redelivers an update, `claim_workflow_run` returns `is_new=false`, so no provider call or duplicate reply occurs. If a campaign is cancelled while an agent is running, cancellation increments `run_version`. The late result fails the expected-version write and is marked stale.

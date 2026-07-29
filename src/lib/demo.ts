@@ -1,6 +1,7 @@
 import type { CampaignSnapshot } from "@/lib/types";
 
 export const demoSnapshot: CampaignSnapshot = {
+  dataSource: "demo",
   id: "demo-campaign",
   campaignDate: new Date().toISOString().slice(0, 10),
   status: "awaiting_generation",
@@ -173,6 +174,19 @@ export const demoSnapshot: CampaignSnapshot = {
       repeatedHook: false
     }
   },
+  promptVersions: [],
+  workflowRuns: [
+    {
+      id: "demo-run",
+      eventType: "daily",
+      status: "completed",
+      claimedAt: new Date(Date.now() - 72e5).toISOString(),
+      completedAt: new Date(Date.now() - 71e5).toISOString()
+    }
+  ],
+  days: [],
+  telegramDeliveryCount: 1,
+  lastTelegramDeliveryAt: new Date(Date.now() - 36e5).toISOString(),
   attempts: [
     {
       version: 2,

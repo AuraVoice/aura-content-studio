@@ -1,28 +1,27 @@
 import {
-  ArrowUpRight,
   Bot,
   CalendarDays,
   CheckCircle2,
-  CircleDot,
   Clock3,
   Film,
-  Layers3,
   LockKeyhole,
   MessageCircle,
   Mic2,
-  MoreHorizontal,
-  Search,
   Sparkles,
   TriangleAlert,
   Video
 } from "lucide-react";
 import { CopyButton } from "./copy-button";
+import { DashboardChat } from "./dashboard-chat";
+import { ManualResearchButton } from "./manual-research-button";
 import { VideoUpload } from "./video-upload";
 import type {
+  CampaignDayLog,
   CampaignSnapshot,
   CriticVerdict,
   PromptPackage,
-  TrendIdea
+  TrendIdea,
+  WorkflowRunLog
 } from "@/lib/types";
 
 const steps = [
@@ -62,6 +61,15 @@ function IdeaCard({
         <h3>{idea.concept}</h3>
         <p className="idea-hook">“{idea.hook}”</p>
         <p className="idea-relevance">{idea.auraRelevance}</p>
+        <div className="source-list">
+          {idea.sources.map((source) => (
+            <a href={source.url} key={source.url} target="_blank" rel="noreferrer">
+              <strong>{source.title}</strong>
+              <span>{source.note}</span>
+              {source.publishedAt ? <small>{source.publishedAt}</small> : null}
+            </a>
+          ))}
+        </div>
       </div>
       <footer>
         <span>
@@ -71,6 +79,96 @@ function IdeaCard({
         <span>{idea.higgsfieldNeeded ? "Higgsfield" : "No credits"}</span>
       </footer>
     </article>
+  );
+}
+
+function RunList({ runs }: { runs: WorkflowRunLog[] }) {
+  if (!runs.length) return <p className="empty-copy">No workflow runs were recorded.</p>;
+  return (
+    <div className="run-list">
+      {runs.map((run) => (
+        <div key={run.id}>
+          <span className={`run-status run-${run.status}`}>{run.status}</span>
+          <div>
+            <strong>{formatLabel(run.eventType)}</strong>
+            <small>{new Date(run.claimedAt).toLocaleString()}</small>
+            {run.error ? <p>{run.error}</p> : null}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DayLog({ day, current }: { day: CampaignDayLog; current: boolean }) {
+  return (
+    <details className="day-log" open={current}>
+      <summary>
+        <span>{day.campaignDate}</span>
+        <strong>{day.currentStep}</strong>
+        <em className={`run-status run-${day.status === "failed" ? "failed" : "completed"}`}>
+          {formatLabel(day.status)}
+        </em>
+        <small>
+          {day.ideas.length} ideas · {day.prompts.length} prompt versions · {day.workflowRuns.length} runs
+        </small>
+      </summary>
+      <div className="day-log-body">
+        {day.error ? <p className="error-banner">{day.error}</p> : null}
+        <section>
+          <p className="section-label">Workflow execution</p>
+          <RunList runs={day.workflowRuns} />
+        </section>
+        <section>
+          <p className="section-label">Research and source evidence</p>
+          {day.ideas.length ? (
+            <div className="ideas-grid">
+              {day.ideas.map((idea) => (
+                <IdeaCard key={idea.id ?? idea.rank} idea={idea} selected={false} />
+              ))}
+            </div>
+          ) : (
+            <p className="empty-copy">No research ideas were saved for this run.</p>
+          )}
+        </section>
+        <section>
+          <p className="section-label">Finalized prompt versions</p>
+          {day.prompts.length ? (
+            <div className="archived-prompts">
+              {day.prompts.map((prompt) => (
+                <PromptPanel key={prompt.id ?? prompt.version} prompt={prompt} />
+              ))}
+            </div>
+          ) : (
+            <p className="empty-copy">No prompt reached the finalized state.</p>
+          )}
+        </section>
+        <section>
+          <p className="section-label">Conversation and Telegram delivery</p>
+          {day.messages.length ? (
+            <div className="message-list">
+              {day.messages.map((message, index) => (
+                <div
+                  key={message.id ?? `${message.createdAt}-${index}`}
+                  className={`message message-${message.direction}`}
+                >
+                  <span>{message.source}</span>
+                  <p>{message.text}</p>
+                  <small>
+                    {new Date(message.createdAt).toLocaleString()}
+                    {message.telegramMessageId
+                      ? ` · Telegram #${message.telegramMessageId}`
+                      : ""}
+                  </small>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="empty-copy">No conversation was recorded for this day.</p>
+          )}
+        </section>
+      </div>
+    </details>
   );
 }
 
@@ -190,52 +288,63 @@ function CriticBadge({ verdict }: { verdict: CriticVerdict }) {
 
 export function Dashboard({ snapshot }: { snapshot: CampaignSnapshot }) {
   const step = activeStep(snapshot.status);
+  const dailyRun = snapshot.workflowRuns.find((run) => run.eventType === "daily");
   return (
     <main className="db-app">
-      <aside className="sidebar">
-        <div className="brand-lockup">
-          <span className="aura-mark">A</span>
-          <span>Aura <small>Content Studio</small></span>
-        </div>
-        <nav className="side-nav" aria-label="Studio sections">
-          <a href="#campaign" className="active"><CircleDot size={18} /> Today</a>
-          <a href="#ideas"><Search size={18} /> Trend desk</a>
-          <a href="#direction"><Sparkles size={18} /> Direction</a>
-          <a href="#review"><Film size={18} /> Review room</a>
-          <a href="#history"><Layers3 size={18} /> Attempts</a>
-          <a href="#conversation"><MessageCircle size={18} /> Conversation</a>
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="system-status">
-            <span className="signal-dot" />
-            <div>
-              <strong>Orchestrator online</strong>
-              <small>Telegram connected</small>
-            </div>
-          </div>
-          <form action="/api/auth/logout" method="post">
-            <button className="logout-button" type="submit">Lock studio</button>
-          </form>
-        </div>
-      </aside>
-
       <section className="workspace">
-        <header className="topbar" id="campaign">
+        <header className="topbar">
+          <div className="brand-lockup">
+            <span className="aura-mark">A</span>
+            <span>Aura <small>Content Studio</small></span>
+          </div>
           <div>
             <p className="eyebrow">
               <CalendarDays size={13} /> Campaign {snapshot.campaignDate}
             </p>
-            <h1>Today’s campaign desk</h1>
+            <h1>Research and production log</h1>
           </div>
-          <div className="topbar-actions">
-            <span className="private-pill"><LockKeyhole size={13} /> Private</span>
-            <button className="icon-button" type="button" aria-label="More options">
-              <MoreHorizontal size={19} />
-            </button>
-          </div>
+          <form action="/api/auth/logout" method="post">
+            <button className="logout-button" type="submit">Sign out</button>
+          </form>
         </header>
 
         <div className="content-scroll">
+          {snapshot.dataSource === "demo" ? (
+            <p className="error-banner">
+              Demo data is showing because no live campaign database is available.
+            </p>
+          ) : null}
+
+          <section className="operations-grid">
+            <article className="operation-card">
+              <p className="section-label">Today’s cron</p>
+              <strong>{dailyRun ? formatLabel(dailyRun.status) : "Not recorded"}</strong>
+              <small>
+                {dailyRun
+                  ? new Date(dailyRun.claimedAt).toLocaleString()
+                  : "No daily workflow run exists for this campaign"}
+              </small>
+              {dailyRun?.error ? <p>{dailyRun.error}</p> : null}
+              <ManualResearchButton />
+            </article>
+            <article className="operation-card">
+              <p className="section-label">Telegram delivery</p>
+              <strong>{snapshot.telegramDeliveryCount} delivered messages</strong>
+              <small>
+                {snapshot.lastTelegramDeliveryAt
+                  ? `Last delivery ${new Date(snapshot.lastTelegramDeliveryAt).toLocaleString()}`
+                  : "No successful Telegram delivery recorded"}
+              </small>
+            </article>
+            <article className="operation-card">
+              <p className="section-label">Saved artifacts</p>
+              <strong>
+                {snapshot.ideas.length} ideas · {snapshot.promptVersions.length} prompts
+              </strong>
+              <small>{snapshot.days.length} campaign days available in the log</small>
+            </article>
+          </section>
+
           <section className="campaign-hero">
             <div className="campaign-title">
               <div>
@@ -265,34 +374,82 @@ export function Dashboard({ snapshot }: { snapshot: CampaignSnapshot }) {
             </div>
           </section>
 
-          <section id="ideas" className="section-block">
+          <section className="studio-card conversation-card">
+            <div className="card-heading compact">
+              <div>
+                <p className="eyebrow">Two-way orchestrator</p>
+                <h2>Chat from the dashboard or Telegram</h2>
+              </div>
+              <MessageCircle size={19} />
+            </div>
+            <div className="message-list">
+              {snapshot.messages.length ? (
+                snapshot.messages.map((message, index) => (
+                  <div
+                    key={message.id ?? `${message.createdAt}-${index}`}
+                    className={`message message-${message.direction}`}
+                  >
+                    <span>
+                      {message.direction === "inbound" ? "You" : "Aura Studio"} ·{" "}
+                      {message.source}
+                    </span>
+                    <p>{message.text}</p>
+                    <small>
+                      {new Date(message.createdAt).toLocaleString()}
+                      {message.telegramMessageId
+                        ? ` · Telegram #${message.telegramMessageId}`
+                        : ""}
+                    </small>
+                  </div>
+                ))
+              ) : (
+                <p className="empty-copy">No conversation has been recorded yet.</p>
+              )}
+            </div>
+            <DashboardChat />
+          </section>
+
+          <section className="section-block">
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Trend Scout</p>
-                <h2>Three angles for today</h2>
+                <h2>Today’s research, sources, and three angles</h2>
               </div>
-              <a className="text-link" href="#conversation">
-                See research notes <ArrowUpRight size={14} />
-              </a>
             </div>
-            <div className="ideas-grid">
-              {snapshot.ideas.map((idea) => (
-                <IdeaCard
-                  key={idea.id ?? idea.rank}
-                  idea={idea}
-                  selected={idea.id === snapshot.selectedIdea?.id}
-                />
-              ))}
-            </div>
+            {snapshot.ideas.length ? (
+              <div className="ideas-grid">
+                {snapshot.ideas.map((idea) => (
+                  <IdeaCard
+                    key={idea.id ?? idea.rank}
+                    idea={idea}
+                    selected={idea.id === snapshot.selectedIdea?.id}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="studio-card empty-state">
+                <strong>No research was finalized today.</strong>
+                <p>
+                  {dailyRun?.error ??
+                    "The daily workflow has not produced research ideas yet. Use the chat above to run research."}
+                </p>
+              </div>
+            )}
           </section>
 
           {snapshot.prompt ? (
-            <div id="direction">
+            <div>
               <PromptPanel prompt={snapshot.prompt} />
             </div>
-          ) : null}
+          ) : (
+            <section className="studio-card empty-state">
+              <p className="eyebrow">Prompt Director</p>
+              <strong>No finalized prompt exists for today.</strong>
+              <p>Research must complete and an idea must be selected before the three prompts are generated.</p>
+            </section>
+          )}
 
-          <section className="review-grid" id="review">
+          <section className="review-grid">
             <div className="studio-card media-card">
               <div className="card-heading compact">
                 <div>
@@ -315,7 +472,7 @@ export function Dashboard({ snapshot }: { snapshot: CampaignSnapshot }) {
               <VideoUpload />
               <div className="media-meta">
                 <span>{snapshot.upload?.fileName ?? "No file yet"}</span>
-                <span>Private storage</span>
+                <span>Authenticated media</span>
               </div>
             </div>
 
@@ -356,56 +513,18 @@ export function Dashboard({ snapshot }: { snapshot: CampaignSnapshot }) {
             </div>
           </section>
 
-          <section className="lower-grid">
-            <div className="studio-card attempts-card" id="history">
-              <div className="card-heading compact">
-                <div>
-                  <p className="eyebrow">Version trail</p>
-                  <h2>Attempts and revisions</h2>
-                </div>
-                <span className="count-pill">{snapshot.attempts.length}</span>
+          <section className="studio-card log-explorer">
+            <div className="card-heading">
+              <div>
+                <p className="eyebrow">Daily archive</p>
+                <h2>Research, workflow runs, and finalized prompts</h2>
               </div>
-              <div className="attempt-list">
-                {snapshot.attempts.map((attempt) => (
-                  <div key={attempt.version}>
-                    <span className={attempt.status === "Current" ? "current" : ""}>
-                      v{attempt.version}
-                    </span>
-                    <div>
-                      <strong>{attempt.label}</strong>
-                      <small>{new Date(attempt.createdAt).toLocaleString()}</small>
-                    </div>
-                    <em>{attempt.status}</em>
-                  </div>
-                ))}
-              </div>
+              <span className="count-pill">{snapshot.days.length} days</span>
             </div>
-
-            <div className="studio-card conversation-card" id="conversation">
-              <div className="card-heading compact">
-                <div>
-                  <p className="eyebrow">Orchestrator</p>
-                  <h2>Telegram conversation</h2>
-                </div>
-                <MessageCircle size={19} />
-              </div>
-              <div className="message-list">
-                {snapshot.messages.slice(-6).map((message, index) => (
-                  <div
-                    key={message.id ?? `${message.createdAt}-${index}`}
-                    className={`message message-${message.direction}`}
-                  >
-                    <span>{message.direction === "inbound" ? "You" : "Aura Studio"}</span>
-                    <p>{message.text}</p>
-                    <small>
-                      {new Date(message.createdAt).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit"
-                      })}
-                    </small>
-                  </div>
-                ))}
-              </div>
+            <div className="day-list">
+              {snapshot.days.map((day, index) => (
+                <DayLog key={day.id} day={day} current={index === 0} />
+              ))}
             </div>
           </section>
 
