@@ -45,3 +45,9 @@ Problem: Trend Scout failures stopped daily and manual research without sending 
 Issue: Specialist exceptions escaped the LangGraph orchestrator, Telegram delivery happened only after a successful workflow return, and Promise.allSettled discarded every rejected search reason.
 Solution: Convert Trend Scout exceptions into handled workflow state, preserve unique provider errors, and run scheduled and manual research inside a durable workflow that creates versioned attempt claims and retries with capped backoff until Telegram confirms delivery.
 Justification: The orchestrator now owns specialist failure behavior, failed attempts remain diagnosable without ending the job, and function timeouts or deployments cannot silently discard the pending Telegram result.
+
+2026-07-30
+Problem: Brave Search rate limits and Gemini 429 responses could prevent the workflow from ever reaching a usable video-generation prompt.
+Issue: Five Brave requests started concurrently despite request-rate enforcement, empty or failed search results were treated as terminal, and Prompt Director had no rate-limit fallback.
+Solution: Pace and retry Brave requests, continue with product-safe evergreen ideas when optional research or Trend Scout fails, and return a validated three-clip production package when Prompt Director is rate limited.
+Justification: Web research now improves an idea without becoming a prerequisite, while the highest-value output, a directly usable video prompt, remains available during provider throttling.
