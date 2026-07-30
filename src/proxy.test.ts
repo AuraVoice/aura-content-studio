@@ -27,8 +27,11 @@ describe("private route boundary", () => {
     const telegram = proxy(
       new NextRequest("https://studio.example.com/api/telegram/webhook")
     );
+    const workflow = proxy(
+      new NextRequest("https://studio.example.com/.well-known/workflow/v1/step")
+    );
     expect(cron.headers.get("x-middleware-next")).toBe("1");
     expect(telegram.headers.get("x-middleware-next")).toBe("1");
+    expect(workflow.headers.get("x-middleware-next")).toBe("1");
   });
 });
-

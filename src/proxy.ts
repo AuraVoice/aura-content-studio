@@ -6,6 +6,7 @@ export function proxy(request: NextRequest) {
   const isPublic =
     path === "/login" ||
     path.startsWith("/api/auth/") ||
+    path.startsWith("/.well-known/workflow/") ||
     path === "/api/telegram/webhook" ||
     path === "/api/cron/daily";
 

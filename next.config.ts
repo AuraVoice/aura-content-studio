@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
+import { withWorkflow } from "workflow/next";
 
-const nextConfig: NextConfig = {
+export const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
     const securityHeaders = [
@@ -55,4 +56,4 @@ const nextConfig: NextConfig = {
   }
 };
 
-export default nextConfig;
+export default withWorkflow(nextConfig);

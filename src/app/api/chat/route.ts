@@ -86,6 +86,19 @@ export async function POST(request: Request) {
         text
       });
     }
+    if (result.state.status === "failed") {
+      const failure = describeWorkflowFailure(new Error(result.state.error));
+      await completeWorkflowRun(run.id, "failed", { failure }, failure.message);
+      return NextResponse.json(
+        {
+          messages: result.messages,
+          error: failure.message,
+          code: failure.code,
+          retryable: failure.retryable
+        },
+        { status: 500 }
+      );
+    }
     await completeWorkflowRun(run.id, result.state.stale ? "stale" : "completed", {
       status: result.state.status,
       interrupted: result.interrupted

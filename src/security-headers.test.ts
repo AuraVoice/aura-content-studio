@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import nextConfig from "../next.config";
+import { nextConfig } from "../next.config";
 
 describe("security headers", () => {
   it("blocks indexing, framing, MIME sniffing, and browser feature access", async () => {
@@ -26,4 +26,3 @@ describe("security headers", () => {
     }
   });
 });
-

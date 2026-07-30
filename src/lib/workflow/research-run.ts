@@ -20,6 +20,9 @@ export interface ResearchRunResult {
   duplicate: boolean;
   campaignId: string;
   status: string;
+  telegramDelivered: boolean;
+  claimedAt?: string;
+  error?: string;
 }
 
 export function manualResearchKey(campaignId: string, requestId: string): string {
@@ -32,6 +35,7 @@ export async function executeResearchRun(input: {
   workflowEventType: "daily" | "manual_research";
   ownerInstruction?: string;
   onClaimed?: () => Promise<void>;
+  suppressFailureMessages?: boolean;
 }): Promise<ResearchRunResult> {
   const campaignId = String(input.campaign.id);
   const run = await claimWorkflowRun({
@@ -44,7 +48,9 @@ export async function executeResearchRun(input: {
     return {
       duplicate: true,
       campaignId,
-      status: run.status
+      status: run.status,
+      telegramDelivered: run.status === "completed",
+      claimedAt: run.claimed_at
     };
   }
 
@@ -58,8 +64,14 @@ export async function executeResearchRun(input: {
       eventType: "daily",
       ownerInstruction: input.ownerInstruction
     });
-    for (const text of result.messages) {
+    const messages =
+      input.suppressFailureMessages && result.state.status === "failed"
+        ? []
+        : result.messages;
+    let telegramDelivered = false;
+    for (const text of messages) {
       const sent = await sendTelegramMessage(env().TELEGRAM_ALLOWED_CHAT_ID, text);
+      telegramDelivered ||= sent.length > 0;
       await saveMessage({
         campaignId,
         telegramMessageId: sent[0]?.message_id,
@@ -68,6 +80,17 @@ export async function executeResearchRun(input: {
         text
       });
     }
+    if (result.state.status === "failed") {
+      const failure = describeWorkflowFailure(new Error(result.state.error));
+      await completeWorkflowRun(run.id, "failed", { failure }, failure.message);
+      return {
+        duplicate: false,
+        campaignId,
+        status: "failed",
+        telegramDelivered: false,
+        error: failure.message
+      };
+    }
     await completeWorkflowRun(run.id, result.state.stale ? "stale" : "completed", {
       status: result.state.status,
       interrupted: result.interrupted
@@ -75,7 +98,8 @@ export async function executeResearchRun(input: {
     return {
       duplicate: false,
       campaignId,
-      status: result.state.status
+      status: result.state.status,
+      telegramDelivered
     };
   } catch (error) {
     const failure = describeWorkflowFailure(error);

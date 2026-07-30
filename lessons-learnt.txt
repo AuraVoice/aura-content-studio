@@ -39,3 +39,9 @@ Problem: Daily campaign research was scheduled for 16:00 UTC indefinitely, which
 Issue: Vercel cron expressions are always UTC and do not support an end date, so the endpoint needed its own campaign window guard.
 Solution: Move the cron to 15:00 UTC and allow campaign work only from July 29 through August 27, 2026, inclusive.
 Justification: The active window contains exactly 30 Pacific calendar dates, and calls outside it stop before database or provider work.
+
+2026-07-29
+Problem: Trend Scout failures stopped daily and manual research without sending the owner a Telegram message, while simultaneous search-provider failures were reported only as missing research.
+Issue: Specialist exceptions escaped the LangGraph orchestrator, Telegram delivery happened only after a successful workflow return, and Promise.allSettled discarded every rejected search reason.
+Solution: Convert Trend Scout exceptions into handled workflow state, preserve unique provider errors, and run scheduled and manual research inside a durable workflow that creates versioned attempt claims and retries with capped backoff until Telegram confirms delivery.
+Justification: The orchestrator now owns specialist failure behavior, failed attempts remain diagnosable without ending the job, and function timeouts or deployments cannot silently discard the pending Telegram result.

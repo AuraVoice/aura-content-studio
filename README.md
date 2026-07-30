@@ -10,8 +10,11 @@ The owner experience is username and password only. A successful login creates a
 Vercel Cron (daily)                         Telegram owner
        | CRON_SECRET                        | webhook secret + chat allowlist
        v                                    v
-  /api/cron/daily  ---------------->  /api/telegram/webhook
+  /api/cron/daily                     /api/telegram/webhook
        |                                      |
+       v                                      |
+ Vercel durable workflow                     |
+ [retry, sleep, resume]                       |
        +--------------+-----------------------+
                       v
               LangGraph orchestrator
@@ -34,10 +37,13 @@ Vercel Cron (daily)                         Telegram owner
 The orchestrator is the only component that sends conversational messages. Specialist agents return structured data to it. `interrupt()` pauses at idea selection and before any recommended paid regeneration. Telegram replies resume the same LangGraph thread through `Command({ resume })`.
 
 ```text
-Cron retry or duplicate Telegram update
+Cron, manual research, or duplicate delivery
                   |
                   v
-      unique workflow idempotency key
+       durable research workflow
+                  |
+                  v
+     unique key for every retry attempt
           | new                | existing
           v                    v
   claim run + version      return without work
@@ -51,19 +57,23 @@ Cron retry or duplicate Telegram update
     v                      v
  durable write          mark stale, ignore result
     |
-    +--> provider error: run = failed, visible in Vercel logs
+    +--> provider error: record attempt, wait with backoff, retry
+    +--> invalid model output: regenerate, validate, retry
+    +--> Telegram error: do not complete, wait with backoff, retry
     +--> process restart: LangGraph reloads checkpoint by thread_id
     +--> duplicate upload: Telegram unique ID + SHA-256 uniqueness rejects it
 ```
 
 ### Happy path
 
-1. `/api/cron/daily` claims the date through `claim_daily_campaign`.
+1. `/api/cron/daily` claims the date through `claim_daily_campaign` and starts a durable workflow.
 2. Trend Scout searches five current topic groups and stores exactly three cited ideas.
-3. LangGraph persists a checkpoint and interrupts for idea selection.
-4. A Telegram reply resumes the thread. Prompt Director stores a versioned, validated prompt with locked attributes.
-5. The owner generates manually in Higgsfield and uploads the result to Telegram.
-6. The upload is hashed, stored privately, evaluated by Gemini, and shown with its verdict in Telegram and the dashboard.
+3. Any research, model-validation, or Telegram failure is recorded and retried with durable backoff.
+4. The workflow completes only after Telegram confirms delivery of the idea list.
+5. LangGraph persists a checkpoint and interrupts for idea selection.
+6. A Telegram reply resumes the thread. Prompt Director stores a versioned, validated prompt with locked attributes.
+7. The owner generates manually in Higgsfield and uploads the result to Telegram.
+8. The upload is hashed, stored privately, evaluated by Gemini, and shown with its verdict in Telegram and the dashboard.
 
 ### Manual research runs
 
@@ -73,15 +83,17 @@ scheduled campaign window.
 
 Each click:
 
-1. Creates a unique `manual-research:<campaign>:<request>` workflow claim.
-2. Starts a fresh LangGraph thread for the latest research pass.
-3. Replaces that day’s three ranked ideas with newly sourced results.
-4. Stores the run status and any error in the dashboard log.
-5. Sends the new idea list to Telegram for selection.
+1. Starts a durable workflow identified by `manual-research:<date>:<request>`.
+2. Creates a unique idempotency claim for each retry attempt.
+3. Starts a fresh LangGraph thread for the latest research pass.
+4. Replaces that day’s three ranked ideas with newly sourced results.
+5. Records failed attempts without ending the durable workflow.
+6. Completes only after Telegram confirms delivery of the new idea list.
 
-Browser retries of the same click reuse its request identifier and cannot duplicate the
-provider call. A later click receives a new identifier and intentionally starts another run.
-The scheduled `/api/cron/daily` endpoint keeps its once-per-date idempotency behavior.
+Browser retries of the same click reuse its request identifier. A later click receives a new
+identifier and intentionally starts another run. Retry delays begin at 30 seconds and cap at
+one hour. Retries survive request timeouts and deployments. Cancelling a campaign or replacing
+its run version stops its durable retry workflow.
 
 ### Duplicate and cancellation path
 

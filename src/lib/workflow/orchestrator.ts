@@ -18,6 +18,7 @@ import {
   updateCampaign
 } from "@/lib/repository";
 import { geminiCriticSubgraph, promptDirectorSubgraph, trendScoutSubgraph } from "./specialists";
+import { describeWorkflowFailure } from "./errors";
 import { WorkflowState, type WorkflowValue } from "./state";
 import type { TrendIdea } from "@/lib/types";
 
@@ -128,20 +129,47 @@ export async function createOrchestrator(customCheckpointer?: BaseCheckpointSave
       return { route: "noop" as const };
     })
     .addNode("run_trend_scout", async (state) => {
-      const result = await trendScoutSubgraph.invoke({
-        instruction: state.ownerInstruction
-      });
-      const ideas = await saveTrendIdeas(state.campaignId, result.ideas, state.runVersion);
-      if (!ideas.length) return { stale: true, status: "cancelled" };
+      try {
+        const result = await trendScoutSubgraph.invoke({
+          instruction: state.ownerInstruction
+        });
+        const ideas = await saveTrendIdeas(state.campaignId, result.ideas, state.runVersion);
+        if (!ideas.length) return { stale: true, status: "cancelled" };
+        const current = await updateCampaign(
+          state.campaignId,
+          { status: "awaiting_idea", current_step: "Waiting for idea selection" },
+          state.runVersion
+        );
+        if (!current) return { stale: true, status: "cancelled" };
+        return {
+          ideas,
+          status: "awaiting_idea",
+          outboundMessages: [formatIdeaList(ideas)]
+        };
+      } catch (error) {
+        const failure = describeWorkflowFailure(error);
+        return {
+          status: "failed",
+          error: failure.technicalDetail
+        };
+      }
+    })
+    .addNode("handle_research_failure", async (state) => {
+      const failure = describeWorkflowFailure(new Error(state.error));
       await updateCampaign(
         state.campaignId,
-        { status: "awaiting_idea", current_step: "Waiting for idea selection" },
+        {
+          status: "failed",
+          current_step: "Research failed",
+          error: failure.message
+        },
         state.runVersion
       );
       return {
-        ideas,
-        status: "awaiting_idea",
-        outboundMessages: [formatIdeaList(ideas)]
+        status: "failed",
+        outboundMessages: [
+          `Aura research failed before any ideas were saved.\n\n${failure.message}\n\nOpen the dashboard run details for the recorded cause, then retry research.`
+        ]
       };
     })
     .addNode("request_idea_approval", (state) => {
@@ -319,7 +347,15 @@ export async function createOrchestrator(customCheckpointer?: BaseCheckpointSave
       cancel: "cancel_campaign",
       noop: "noop"
     })
-    .addEdge("run_trend_scout", "request_idea_approval")
+    .addConditionalEdges(
+      "run_trend_scout",
+      (state) => (state.status === "failed" ? "failed" : "ready"),
+      {
+        failed: "handle_research_failure",
+        ready: "request_idea_approval"
+      }
+    )
+    .addEdge("handle_research_failure", END)
     .addEdge("request_idea_approval", "resolve_idea")
     .addConditionalEdges("resolve_idea", (state) => state.decision, {
       selected: "run_prompt_director",

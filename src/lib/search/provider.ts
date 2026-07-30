@@ -105,5 +105,22 @@ export async function dailyTrendResearch(provider = searchProvider()) {
   const settled = await Promise.allSettled(
     queries.map((query) => provider.search(query, { maxResults: 5, days: 7 }))
   );
-  return settled.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+  const results = settled.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : []
+  );
+  if (results.length) return results;
+
+  const providerErrors = Array.from(
+    new Set(
+      settled.flatMap((result) =>
+        result.status === "rejected"
+          ? [result.reason instanceof Error ? result.reason.message : "Unknown search failure"]
+          : []
+      )
+    )
+  );
+  const detail = providerErrors.length
+    ? ` Provider errors: ${providerErrors.join("; ")}`
+    : "";
+  throw new Error(`No current web research was available.${detail}`);
 }

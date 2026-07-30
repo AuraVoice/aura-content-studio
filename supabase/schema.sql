@@ -217,6 +217,90 @@ begin
 end;
 $$;
 
+create or replace function save_trend_ideas_if_current(
+  p_campaign_id uuid,
+  p_expected_run_version integer,
+  p_ideas jsonb
+)
+returns setof trend_ideas
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  campaign campaigns;
+begin
+  select *
+  into campaign
+  from campaigns
+  where id = p_campaign_id
+  for update;
+
+  if not found
+    or campaign.run_version <> p_expected_run_version
+    or campaign.cancelled_at is not null
+  then
+    return;
+  end if;
+
+  return query
+  insert into trend_ideas (
+    campaign_id,
+    rank,
+    concept,
+    hook,
+    format,
+    platform,
+    aura_relevance,
+    sources,
+    shelf_life,
+    higgsfield_needed,
+    generation_risk,
+    risk_reason
+  )
+  select
+    p_campaign_id,
+    idea.rank,
+    idea.concept,
+    idea.hook,
+    idea.format,
+    idea.platform,
+    idea.aura_relevance,
+    idea.sources,
+    idea.shelf_life,
+    idea.higgsfield_needed,
+    idea.generation_risk,
+    idea.risk_reason
+  from jsonb_to_recordset(p_ideas) as idea(
+    rank smallint,
+    concept text,
+    hook text,
+    format text,
+    platform text,
+    aura_relevance text,
+    sources jsonb,
+    shelf_life text,
+    higgsfield_needed boolean,
+    generation_risk text,
+    risk_reason text
+  )
+  on conflict (campaign_id, rank) do update
+  set
+    concept = excluded.concept,
+    hook = excluded.hook,
+    format = excluded.format,
+    platform = excluded.platform,
+    aura_relevance = excluded.aura_relevance,
+    sources = excluded.sources,
+    shelf_life = excluded.shelf_life,
+    higgsfield_needed = excluded.higgsfield_needed,
+    generation_risk = excluded.generation_risk,
+    risk_reason = excluded.risk_reason,
+    created_at = now()
+  returning *;
+end;
+$$;
+
 create or replace function login_is_allowed(p_key_hash text)
 returns boolean
 language sql
@@ -312,12 +396,15 @@ revoke all on table auth_login_rate_limits from anon, authenticated;
 revoke all on function claim_daily_campaign(date) from public, anon, authenticated;
 revoke all on function claim_workflow_run(text, uuid, integer, text)
   from public, anon, authenticated;
+revoke all on function save_trend_ideas_if_current(uuid, integer, jsonb)
+  from public, anon, authenticated;
 revoke all on function login_is_allowed(text) from public, anon, authenticated;
 revoke all on function record_login_attempt(text, boolean, integer, integer)
   from public, anon, authenticated;
 
 grant execute on function claim_daily_campaign(date) to service_role;
 grant execute on function claim_workflow_run(text, uuid, integer, text) to service_role;
+grant execute on function save_trend_ideas_if_current(uuid, integer, jsonb) to service_role;
 grant execute on function login_is_allowed(text) to service_role;
 grant execute on function record_login_attempt(text, boolean, integer, integer)
   to service_role;

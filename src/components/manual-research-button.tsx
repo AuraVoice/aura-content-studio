@@ -19,13 +19,9 @@ export function ManualResearchButton() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestId: crypto.randomUUID() })
       });
-      const body = await response.json() as { error?: string; duplicate?: boolean };
+      const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || "Research run failed");
-      setStatus(
-        body.duplicate
-          ? "This click was already processed."
-          : "Research finished and results were sent to Telegram."
-      );
+      setStatus("Research queued. It will retry until the result reaches Telegram.");
       router.refresh();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Research run failed");

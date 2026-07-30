@@ -68,6 +68,44 @@ export async function getActiveCampaign(): Promise<Row | null> {
   return data as Row | null;
 }
 
+export async function beginManualResearch(
+  campaignId: string,
+  threadId: string
+): Promise<Row> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const campaign = await getCampaign(campaignId);
+    if (String(campaign.thread_id) === threadId) {
+      return campaign;
+    }
+    const currentVersion = Number(campaign.run_version);
+    const nextVersion = currentVersion + 1;
+    const claimed = await updateCampaign(
+      campaignId,
+      {
+        status: "researching",
+        current_step: "Manual research queued",
+        thread_id: threadId,
+        run_version: nextVersion,
+        cancelled_at: null,
+        error: null
+      },
+      currentVersion
+    );
+    if (claimed) {
+      return {
+        ...campaign,
+        status: "researching",
+        current_step: "Manual research queued",
+        thread_id: threadId,
+        run_version: nextVersion,
+        cancelled_at: null,
+        error: null
+      };
+    }
+  }
+  throw new Error("Another research run kept changing the campaign. Try again.");
+}
+
 export async function updateCampaign(
   campaignId: string,
   values: Record<string, unknown>,
@@ -98,7 +136,14 @@ export async function claimWorkflowRun(input: {
   campaignId: string;
   runVersion: number;
   eventType: string;
-}): Promise<{ id: string; status: string; claimed_at: string; is_new: boolean }> {
+}): Promise<{
+  id: string;
+  status: string;
+  claimed_at: string;
+  event_type: string;
+  run_version: number;
+  is_new: boolean;
+}> {
   const { data, error } = await supabaseAdmin().rpc("claim_workflow_run", {
     p_key: input.key,
     p_campaign_id: input.campaignId,
@@ -109,6 +154,8 @@ export async function claimWorkflowRun(input: {
     id: string;
     status: string;
     claimed_at: string;
+    event_type: string;
+    run_version: number;
     is_new: boolean;
   };
 }
@@ -136,12 +183,7 @@ export async function saveTrendIdeas(
   ideas: TrendIdea[],
   expectedRunVersion: number
 ): Promise<TrendIdea[]> {
-  const campaign = await getCampaign(campaignId);
-  if (Number(campaign.run_version) !== expectedRunVersion || campaign.cancelled_at) {
-    return [];
-  }
   const rows = ideas.map((idea) => ({
-    campaign_id: campaignId,
     rank: idea.rank,
     concept: idea.concept,
     hook: idea.hook,
@@ -154,13 +196,13 @@ export async function saveTrendIdeas(
     generation_risk: idea.generationRisk,
     risk_reason: idea.riskReason
   }));
-  const { data, error } = await supabaseAdmin()
-    .from("trend_ideas")
-    .upsert(rows, { onConflict: "campaign_id,rank" })
-    .select("*")
-    .order("rank");
+  const { data, error } = await supabaseAdmin().rpc("save_trend_ideas_if_current", {
+    p_campaign_id: campaignId,
+    p_expected_run_version: expectedRunVersion,
+    p_ideas: rows
+  });
   if (error) throw new Error(error.message);
-  return (data ?? []).map(mapIdea);
+  return ((data as Row[] | null) ?? []).map(mapIdea);
 }
 
 export async function listIdeas(campaignId: string): Promise<TrendIdea[]> {

@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { campaignScheduleStatus } from "@/lib/campaign-schedule";
 import { env } from "@/lib/env";
-import {
-  claimDailyCampaign,
-  localDate
-} from "@/lib/repository";
-import { executeResearchRun } from "@/lib/workflow/research-run";
+import { localDate } from "@/lib/repository";
+import { start } from "workflow/api";
+import { deliverResearchUntilTelegram } from "../../../../../workflows/research-delivery";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,20 +23,21 @@ export async function GET(request: NextRequest) {
       date
     });
   }
-  const campaign = await claimDailyCampaign(date);
-  const campaignId = campaign.id as string;
   try {
-    const result = await executeResearchRun({
-      campaign: {
-        id: campaignId,
-        campaign_date: date,
-        thread_id: String(campaign.thread_id),
-        run_version: Number(campaign.run_version)
-      },
-      idempotencyKey: `daily:${date}`,
-      workflowEventType: "daily"
+    const run = await start(deliverResearchUntilTelegram, [
+      {
+        campaignDate: date,
+        threadId: `campaign:${date}`,
+        baseIdempotencyKey: `daily:${date}`,
+        executionId: randomUUID(),
+        workflowEventType: "daily"
+      }
+    ]);
+    return NextResponse.json({
+      ok: true,
+      queued: true,
+      runId: run.runId
     });
-    return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     const text = error instanceof Error ? error.message : "Unknown daily workflow error";
     return NextResponse.json({ ok: false, error: text }, { status: 500 });
