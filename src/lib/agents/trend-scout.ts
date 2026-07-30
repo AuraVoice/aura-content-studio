@@ -90,16 +90,63 @@ export function resolveEvidenceSources(
   });
 }
 
+export function fallbackTrendIdeas(instruction?: string): TrendIdea[] {
+  const ownerContext = instruction?.trim()
+    ? ` Owner direction: ${instruction.trim()}`
+    : "";
+  return [
+    {
+      rank: 1,
+      concept: "A creator admits how often tab switching breaks her focus, then shows Aura staying available in a lightweight Windows overlay.",
+      hook: "I was losing my train of thought before I even reached the AI tab.",
+      format: "ugc_video",
+      platform: "TikTok",
+      auraRelevance: `Demonstrates Aura as a voice-first Windows companion without claiming computer control.${ownerContext}`,
+      sources: [],
+      shelfLife: "evergreen",
+      higgsfieldNeeded: true,
+      generationRisk: "low",
+      riskReason: "A simple creator-led confession and overlay-safe demonstration avoids fabricated interface detail."
+    },
+    {
+      rank: 2,
+      concept: "A real Windows screen recording shows the global shortcut, a spoken question about visible content, and a useful answer in the overlay.",
+      hook: "The fastest way to ask about my screen is to stay on my screen.",
+      format: "screen_recording",
+      platform: "YouTube Shorts",
+      auraRelevance: `Shows screen understanding only after access is enabled and keeps the product experience grounded in Windows.${ownerContext}`,
+      sources: [],
+      shelfLife: "evergreen",
+      higgsfieldNeeded: false,
+      generationRisk: "low",
+      riskReason: "A real capture is more credible than generating interface details."
+    },
+    {
+      rank: 3,
+      concept: "A before-and-after product demo contrasts scattered tabs with asking Aura aloud and refining a draft without leaving the current task.",
+      hook: "Same work. Fewer detours.",
+      format: "product_demo",
+      platform: "Instagram Reels",
+      auraRelevance: `Connects voice conversation, visible drafting, and reduced context switching on Windows without implying autonomous actions.${ownerContext}`,
+      sources: [],
+      shelfLife: "evergreen",
+      higgsfieldNeeded: false,
+      generationRisk: "medium",
+      riskReason: "The edit must clearly separate real product capture from any illustrative creator footage."
+    }
+  ];
+}
+
 export async function runTrendScout(
   provider?: SearchProvider,
   instruction?: string
 ): Promise<TrendIdea[]> {
-  const research = await dailyTrendResearch(provider);
+  const research = await dailyTrendResearch(provider).catch(() => []);
   const availableResearch = Array.from(
     new Map(research.map((item) => [item.url, item])).values()
   ).slice(0, 24);
   if (!availableResearch.length) {
-    throw new Error("No current web research was available. Try the research run again.");
+    return fallbackTrendIdeas(instruction);
   }
   const evidence = availableResearch
     .map(
@@ -108,9 +155,10 @@ export async function runTrendScout(
     )
     .join("\n\n");
 
-  const result = await generateStructured(
-    scoutSchemaFor(availableResearch.length),
-    `You are Trend Scout, a marketing research specialist for Aura Desktop.
+  try {
+    const result = await generateStructured(
+      scoutSchemaFor(availableResearch.length),
+      `You are Trend Scout, a marketing research specialist for Aura Desktop.
 
 Return exactly three distinct daily ideas. Rank them by likely impact and honesty.
 At least one idea should avoid Higgsfield when a meme, real screenshot, screen recording, comparison image, or product demo would work better.
@@ -139,13 +187,16 @@ Research evidence:
 ${evidence}
 
 For each idea, explain its specific relevance, honest shelf life, whether Higgsfield is actually needed, and realistic generation risk. Every idea must depict the Windows desktop product.`,
-    { temperature: 0.35, maxAttempts: 3 }
-  );
+      { temperature: 0.35, maxAttempts: 3 }
+    );
 
-  return result.ideas
-    .map((idea) => ({
-      ...idea,
-      sources: resolveEvidenceSources(idea.sources, availableResearch)
-    }))
-    .sort((a, b) => a.rank - b.rank) as TrendIdea[];
+    return result.ideas
+      .map((idea) => ({
+        ...idea,
+        sources: resolveEvidenceSources(idea.sources, availableResearch)
+      }))
+      .sort((a, b) => a.rank - b.rank) as TrendIdea[];
+  } catch {
+    return fallbackTrendIdeas(instruction);
+  }
 }

@@ -12,10 +12,40 @@ export interface SearchProvider {
   search(query: string, options?: { maxResults?: number; days?: number }): Promise<SearchResult[]>;
 }
 
+const BRAVE_REQUEST_INTERVAL_MS = 1_100;
+const BRAVE_MAX_ATTEMPTS = 4;
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function retryDelay(response: Response, attempt: number): number {
+  const retryAfter = response.headers.get("retry-after");
+  const seconds = retryAfter ? Number(retryAfter) : Number.NaN;
+  return Number.isFinite(seconds)
+    ? Math.max(BRAVE_REQUEST_INTERVAL_MS, seconds * 1_000)
+    : BRAVE_REQUEST_INTERVAL_MS * attempt;
+}
+
 export class BraveSearchProvider implements SearchProvider {
-  async search(
+  private queue: Promise<void> = Promise.resolve();
+  private nextRequestAt = 0;
+
+  search(
     query: string,
     options: { maxResults?: number; days?: number } = {}
+  ): Promise<SearchResult[]> {
+    const request = this.queue.then(() => this.searchWithRetry(query, options));
+    this.queue = request.then(
+      () => undefined,
+      () => undefined
+    );
+    return request;
+  }
+
+  private async searchWithRetry(
+    query: string,
+    options: { maxResults?: number; days?: number }
   ): Promise<SearchResult[]> {
     const freshness =
       (options.days ?? 7) <= 1
@@ -34,35 +64,46 @@ export class BraveSearchProvider implements SearchProvider {
     url.searchParams.set("safesearch", "moderate");
     url.searchParams.set("extra_snippets", "true");
 
-    const response = await fetch(url, {
-      headers: {
-        accept: "application/json",
-        "X-Subscription-Token": env().BRAVE_SEARCH_API_KEY ?? ""
-      },
-      signal: AbortSignal.timeout(25_000)
-    });
-    if (!response.ok) {
-      throw new Error(`Brave Search failed with ${response.status}`);
-    }
-    const data = (await response.json()) as {
-      web?: {
-        results: Array<{
-          title: string;
-          url: string;
-          description: string;
-          extra_snippets?: string[];
-          age?: string;
-          page_age?: string;
-        }>;
+    for (let attempt = 1; attempt <= BRAVE_MAX_ATTEMPTS; attempt += 1) {
+      const pacingDelay = Math.max(0, this.nextRequestAt - Date.now());
+      if (pacingDelay) await wait(pacingDelay);
+      this.nextRequestAt = Date.now() + BRAVE_REQUEST_INTERVAL_MS;
+
+      const response = await fetch(url, {
+        headers: {
+          accept: "application/json",
+          "X-Subscription-Token": env().BRAVE_SEARCH_API_KEY ?? ""
+        },
+        signal: AbortSignal.timeout(25_000)
+      });
+      if (response.status === 429 && attempt < BRAVE_MAX_ATTEMPTS) {
+        await wait(retryDelay(response, attempt));
+        continue;
+      }
+      if (!response.ok) {
+        throw new Error(`Brave Search failed with ${response.status}`);
+      }
+      const data = (await response.json()) as {
+        web?: {
+          results: Array<{
+            title: string;
+            url: string;
+            description: string;
+            extra_snippets?: string[];
+            age?: string;
+            page_age?: string;
+          }>;
+        };
       };
-    };
-    return (data.web?.results ?? []).map((result, index) => ({
-      title: result.title,
-      url: result.url,
-      content: [result.description, ...(result.extra_snippets ?? [])].join("\n"),
-      score: 1 / (index + 1),
-      publishedAt: result.page_age ?? result.age
-    }));
+      return (data.web?.results ?? []).map((result, index) => ({
+        title: result.title,
+        url: result.url,
+        content: [result.description, ...(result.extra_snippets ?? [])].join("\n"),
+        score: 1 / (index + 1),
+        publishedAt: result.page_age ?? result.age
+      }));
+    }
+    return [];
   }
 }
 
@@ -108,19 +149,5 @@ export async function dailyTrendResearch(provider = searchProvider()) {
   const results = settled.flatMap((result) =>
     result.status === "fulfilled" ? result.value : []
   );
-  if (results.length) return results;
-
-  const providerErrors = Array.from(
-    new Set(
-      settled.flatMap((result) =>
-        result.status === "rejected"
-          ? [result.reason instanceof Error ? result.reason.message : "Unknown search failure"]
-          : []
-      )
-    )
-  );
-  const detail = providerErrors.length
-    ? ` Provider errors: ${providerErrors.join("; ")}`
-    : "";
-  throw new Error(`No current web research was available.${detail}`);
+  return results;
 }

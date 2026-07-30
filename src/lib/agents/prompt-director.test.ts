@@ -1,5 +1,18 @@
-import { describe, expect, it } from "vitest";
-import { applyLocks, estimateSpeech } from "./prompt-director";
+import { describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  generateStructured: vi.fn()
+}));
+
+vi.mock("@/lib/ai/gemini", () => ({
+  generateStructured: mocks.generateStructured
+}));
+
+import {
+  applyLocks,
+  estimateSpeech,
+  runPromptDirector
+} from "./prompt-director";
 import type { PromptPackage } from "@/lib/types";
 
 const previous: PromptPackage = {
@@ -116,5 +129,35 @@ describe("Prompt Director invariants", () => {
       previous.clips[0].shots[0].camera
     );
     expect(revised.hook).toBe(previous.hook);
+  });
+
+  it("returns a valid production package when the model is rate limited", async () => {
+    mocks.generateStructured.mockRejectedValueOnce(
+      Object.assign(new Error("Resource exhausted with 429"), { status: 429 })
+    );
+
+    const result = await runPromptDirector({
+      idea: {
+        rank: 1,
+        concept: "Creator shows Aura without leaving her Windows task",
+        hook: "Same work. Fewer detours.",
+        format: "ugc_video",
+        platform: "TikTok",
+        auraRelevance: "Aura remains available in a Windows overlay.",
+        sources: [],
+        shelfLife: "evergreen",
+        higgsfieldNeeded: true,
+        generationRisk: "low",
+        riskReason: "Simple creator-led production."
+      }
+    });
+
+    expect(result.clips).toHaveLength(3);
+    expect(result.durationSeconds).toBe(30);
+    expect(result.validation.dialogueFits).toBe(true);
+    expect(result.higgsfieldPrompt).toContain("CLIP 3");
+    expect(result.negativeConstraints).toContain(
+      "No autonomous clicking or computer control"
+    );
   });
 });

@@ -61,6 +61,109 @@ function normalized(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function isRateLimitError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as { status?: unknown; code?: unknown; message?: unknown };
+  return (
+    candidate.status === 429 ||
+    candidate.code === 429 ||
+    candidate.code === "429" ||
+    (typeof candidate.message === "string" &&
+      /\b(429|resource exhausted|rate limit|quota exceeded)\b/i.test(candidate.message))
+  );
+}
+
+export function fallbackPromptPackage(input: {
+  idea: TrendIdea;
+  previous?: PromptPackage;
+}): PromptPackage {
+  const version = (input.previous?.version ?? 0) + 1;
+  if (input.previous) return { ...input.previous, version };
+
+  const creator =
+    "adult white blonde woman in her late twenties, glamorous and confident, wearing a fitted sleeveless navy top";
+  const scripts = [
+    "I stopped opening another tab every time I needed help on my Windows PC.",
+    "I press one shortcut, ask Aura out loud, and keep my work visible.",
+    "It feels less like switching apps and more like having a useful companion nearby."
+  ];
+  const purposes = ["Hook with the familiar problem", "Demonstrate the Aura workflow", "Land the companion-first payoff"];
+  const locations = ["bright apartment kitchen counter", "same bright apartment kitchen counter", "same bright apartment kitchen counter"];
+  const continuity = [
+    ["Creator faces camera with laptop open beside her.", "Creator turns toward the visible Windows laptop and rests one hand beside the keyboard."],
+    ["Match the prior final frame, hand beside the keyboard and eyeline on the Windows laptop.", "Creator turns back toward camera while the laptop remains visible over her shoulder."],
+    ["Match the prior final frame, creator facing camera with the Windows laptop over her shoulder.", "Creator gives a small knowing smile and closes on a clean steady frame."]
+  ];
+  const clips = scripts.map((spokenScript, index) => {
+    const clipNumber = (index + 1) as 1 | 2 | 3;
+    const durationSeconds = 10;
+    const wordCount = spokenScript.split(/\s+/).length;
+    const estimatedSpokenSeconds = estimateSpeech(spokenScript);
+    const camera =
+      "35 mm lens, shoulder-height three-quarter medium shot, creator on the left third, subtle handheld push-in, soft daylight from camera right";
+    const visual = `${creator} at a ${locations[index]}, speaking naturally with a Windows laptop visible and no legible generated interface text`;
+    const higgsfieldPrompt = `Create one continuous 10-second platform-safe UGC clip. ${visual}. ${camera}. She says exactly: "${spokenScript}" Physical action: ${continuity[index][1]} Keep natural lip sync, realistic hands, consistent face, consistent wardrobe, and the same room. Use a blank compositing-safe laptop display with no fabricated Aura interface text.`;
+    return {
+      clipNumber,
+      purpose: purposes[index],
+      durationSeconds,
+      spokenScript,
+      estimatedSpokenSeconds,
+      wordCount,
+      higgsfieldPrompt,
+      continuityIn: continuity[index][0],
+      continuityOut: continuity[index][1],
+      shots: [
+        {
+          startSecond: 0,
+          endSecond: 10,
+          visual,
+          dialogue: spokenScript,
+          camera,
+          overlay: "No generated interface text. Add real Aura capture in post if needed."
+        }
+      ]
+    };
+  });
+  const spokenScript = clips.map((clip) => clip.spokenScript).join(" ");
+  return {
+    version,
+    finalConcept: `${input.idea.concept} Evergreen production fallback`,
+    hook: input.idea.hook,
+    spokenScript,
+    clips,
+    higgsfieldPrompt: clips
+      .map((clip) => `CLIP ${clip.clipNumber}\n${clip.higgsfieldPrompt}`)
+      .join("\n\n"),
+    negativeConstraints: [
+      "No autonomous clicking or computer control",
+      "No Mac hardware or macOS interface",
+      "No fabricated Aura interface text",
+      "No changing face, wardrobe, room, or laptop between clips",
+      "No clipped dialogue, slow delivery, or random camera motion"
+    ],
+    durationSeconds: 30,
+    recommendedModel: "Use the available Higgsfield model with reliable character consistency, lip sync, and start-frame reference support.",
+    failurePoints: [
+      "Generated laptop details may look false, so composite real Aura capture in post.",
+      "Character or wardrobe drift can break continuity between separately generated clips."
+    ],
+    lockedAttributes: { clipCount: 3 },
+    validation: {
+      estimatedSpokenSeconds: clips.reduce(
+        (sum, clip) => sum + clip.estimatedSpokenSeconds,
+        0
+      ),
+      dialogueFits: clips.every(
+        (clip) => clip.estimatedSpokenSeconds <= clip.durationSeconds - 1
+      ),
+      cameraExplicit: true,
+      contradictions: [],
+      repeatedHook: false
+    }
+  };
+}
+
 function replaceCameraDirections(
   prompt: string,
   previousShots: PromptPackage["clips"][number]["shots"],
@@ -216,9 +319,11 @@ export async function runPromptDirector(input: {
   requiredRevision?: string[];
 }): Promise<PromptPackage> {
   const nextVersion = (input.previous?.version ?? 0) + 1;
-  const draft = await generateStructured(
-    promptSchema,
-    `You are Prompt Director for Aura Desktop marketing. Produce a complete, executable direction package.
+  let draft: z.infer<typeof promptSchema>;
+  try {
+    draft = await generateStructured(
+      promptSchema,
+      `You are Prompt Director for Aura Desktop marketing. Produce a complete, executable direction package.
 
 Selected idea:
 ${JSON.stringify(input.idea, null, 2)}
@@ -263,8 +368,12 @@ Requirements:
 - If the instruction requests one change, change only that attribute and copy everything else from the previous package.
 - recommendedModel should describe the Higgsfield capability needed, since model availability varies by subscription.
 - Show only a Windows desktop environment and product experience.`,
-    { temperature: 0.35 }
-  );
+      { temperature: 0.35, maxAttempts: 4 }
+    );
+  } catch (error) {
+    if (!isRateLimitError(error)) throw error;
+    return fallbackPromptPackage(input);
+  }
 
   const locked = applyLocks(draft, input.previous, input.instruction);
   const clips = locked.clips.map((clip, index) => {
