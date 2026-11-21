@@ -1,0 +1,52 @@
+<template>
+  <style>
+    @font-face { font-family: "PlusJakartaSans"; src: url("assets/fonts/PlusJakartaSans-Regular.ttf"); font-weight: 400; }
+    @font-face { font-family: "PlusJakartaSans"; src: url("assets/fonts/PlusJakartaSans-Medium.ttf"); font-weight: 500; }
+    @font-face { font-family: "GeistMono"; src: url("assets/fonts/GeistMono-Medium.ttf"); font-weight: 500; }
+    #root { position: absolute; inset: 0; }
+    #ec-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    #ec-lock { display: flex; align-items: center; gap: 40px; height: 200px; }
+    #ec-mark { position: relative; width: 184px; height: 184px; }
+    #ec-orb { position: absolute; inset: 0; width: 184px; height: 184px; }
+    #ec-icon { position: absolute; inset: 0; width: 184px; height: 184px; border-radius: 44px; box-shadow: 0 24px 60px rgba(20, 60, 55, 0.25); }
+    #ec-word { font-family: "Outfit", sans-serif; font-weight: 600; font-size: 168px; letter-spacing: -0.04em; color: #1a1a1a; line-height: 1; }
+    #ec-line { font-family: "PlusJakartaSans", sans-serif; font-size: 44px; color: #3f3f44; margin-top: 44px; letter-spacing: -0.01em; text-align: center; }
+    #ec-line b { font-weight: 400; color: #148474; }
+    #ec-tag { font-family: "GeistMono", monospace; font-weight: 500; font-size: 28px; letter-spacing: 0.14em; color: #148474; margin-top: 30px; text-transform: uppercase; }
+    #ec-url { font-family: "PlusJakartaSans", sans-serif; font-weight: 500; font-size: 36px; color: #1a1a1a; margin-top: 14px; letter-spacing: -0.005em; }
+    #ec-layout.v #ec-line { max-width: 860px; line-height: 1.3; font-size: 46px; text-wrap: balance; }
+  </style>
+  <div id="root" data-composition-id="endcard"
+    data-composition-variables='[{"id":"layout","type":"enum","label":"Layout","default":"landscape","options":[{"value":"landscape","label":"16:9"},{"value":"vertical","label":"9:16"}]}]'>
+    <div id="ec-layout">
+      <div id="ec-wrap" class="clip" data-start="0" data-duration="3.15" data-track-index="0">
+        <div id="ec-lock">
+          <div id="ec-mark">
+            <img id="ec-orb" src="assets/orb.png" alt="" />
+            <img id="ec-icon" src="assets/aura-icon.png" alt="Aura" />
+          </div>
+          <div id="ec-word">Aura</div>
+        </div>
+        <div id="ec-line">Aura remembers you, <b>and gets your day done.</b></div>
+        <div id="ec-tag">AI companion</div>
+        <div id="ec-url">auravoiceapp.com</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const vars = (window.__hyperframes && window.__hyperframes.getVariables) ? window.__hyperframes.getVariables() : {};
+    if (vars.layout === "vertical") document.getElementById("ec-layout").classList.add("v");
+
+    const tl = gsap.timeline({ paused: true });
+    // the orb arrives, then becomes the app icon as the wordmark wipes in
+    tl.fromTo("#ec-mark", { x: 214 }, { x: 0, duration: 0.5, ease: "power3.inOut" }, 0.3);
+    tl.fromTo("#ec-orb", { scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "power3.out" }, 0);
+    tl.fromTo("#ec-icon", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.35, ease: "power3.out" }, 0.38);
+    tl.fromTo("#ec-orb", { opacity: 1 }, { opacity: 0, duration: 0.2, ease: "none", immediateRender: false }, 0.6);
+    tl.fromTo("#ec-word", { clipPath: "inset(0 100% 0 0)", x: -20 }, { clipPath: "inset(0 0% 0 0)", x: 0, duration: 0.45, ease: "power3.out" }, 0.4);
+    tl.fromTo("#ec-line", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }, 0.45);
+    tl.fromTo("#ec-tag", { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "power1.out" }, 0.55);
+    tl.fromTo("#ec-url", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }, 0.65);
+    window.__timelines["endcard"] = tl;
+  </script>
+</template>

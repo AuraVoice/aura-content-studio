@@ -1,0 +1,6 @@
+# Video studio media is stored with Git LFS (raw captures, prepared screens, renders, brand art, fonts)
+video-studio/**/*.mp4 filter=lfs diff=lfs merge=lfs -text
+video-studio/**/*.mov filter=lfs diff=lfs merge=lfs -text
+video-studio/**/*.png filter=lfs diff=lfs merge=lfs -text
+video-studio/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+video-studio/**/*.ttf filter=lfs diff=lfs merge=lfs -text

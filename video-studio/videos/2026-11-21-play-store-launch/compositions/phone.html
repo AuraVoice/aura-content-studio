@@ -1,0 +1,134 @@
+<template>
+  <style>
+    @font-face { font-family: "PlusJakartaSans"; src: url("assets/fonts/PlusJakartaSans-Medium.ttf"); font-weight: 500; }
+    #root { position: absolute; inset: 0; overflow: hidden; }
+    #ph-layout { position: absolute; inset: 0; }
+
+    /* the clip box: full frame in 16:9; in 9:16 it starts under the headline with a soft top edge,
+       so a zoomed phone slides under the copy instead of colliding with it */
+    #ph-clip { position: absolute; inset: 0; }
+    #ph-layout.v #ph-clip {
+      top: 600px;
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 52px);
+      mask-image: linear-gradient(to bottom, transparent 0, #000 52px);
+    }
+    #ph-stage { position: absolute; left: 1060px; top: 60px; width: 444px; height: 959px; }
+    #ph-layout.v #ph-stage { left: 258px; top: 60px; transform: scale(1.27); transform-origin: 0 0; }
+
+    #ph-cam {
+      position: absolute; left: 0; top: 0; width: 444px; height: 959px;
+      border-radius: 66px; background: #1c1d1f;
+      box-shadow: 0 0 0 2px #3a3c40 inset, 0 40px 90px rgba(20, 60, 55, 0.22), 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+    #ph-btn1 { position: absolute; right: -5px; top: 230px; width: 5px; height: 90px; border-radius: 0 3px 3px 0; background: #2a2c2f; }
+    #ph-btn2 { position: absolute; right: -5px; top: 350px; width: 5px; height: 56px; border-radius: 0 3px 3px 0; background: #2a2c2f; }
+    #ph-screen {
+      position: absolute; left: 12px; top: 12px; width: 420px; height: 935px;
+      border-radius: 55px; overflow: hidden; background: #fff;
+    }
+    #ph-screen video, #ph-screen img {
+      position: absolute; left: 0; top: 0; width: 420px; height: 935px; object-fit: cover; object-position: top;
+    }
+    #ph-punch {
+      position: absolute; left: 50%; top: 13px; width: 13px; height: 13px; margin-left: -6.5px;
+      border-radius: 50%; background: #0b0b0c; box-shadow: 0 0 0 2px #1a1a1c; z-index: 5;
+    }
+    /* Aura's opening line, redrawn ~2.2x the app's size, dark, centred above the orb */
+    #ph-tx {
+      position: absolute; left: 0; top: 430px; width: 420px; height: 282px;
+      display: flex; align-items: flex-end; justify-content: center; z-index: 2;
+    }
+    #ph-tx p {
+      width: 360px; text-align: center; font-family: "PlusJakartaSans", sans-serif; font-weight: 500;
+      font-size: 34px; line-height: 1.24; letter-spacing: -0.015em; color: #1a1a1a;
+    }
+    #ph-tx span { display: inline-block; }
+  </style>
+  <div id="root" data-composition-id="phone"
+    data-composition-variables='[{"id":"layout","type":"enum","label":"Layout","default":"landscape","options":[{"value":"landscape","label":"16:9"},{"value":"vertical","label":"9:16"}]}]'>
+    <div id="ph-layout">
+      <div id="ph-clip" data-layout-allow-overflow>
+        <div id="ph-stage" data-layout-allow-overflow>
+          <div id="ph-cam" data-layout-allow-overflow>
+            <div id="ph-btn1"></div>
+            <div id="ph-btn2"></div>
+            <div id="ph-screen">
+              <video id="ph-voice" class="clip" src="assets/screens/voice_clean.mp4" muted playsinline
+                data-start="0" data-duration="3.9" data-media-start="0" data-track-index="0"></video>
+              <div id="ph-tx" class="clip" data-start="0" data-duration="3.9" data-track-index="1">
+                <p><span>hey,</span> <span>how's</span> <span>that</span> <span>steady</span> <span>running</span> <span>habit</span> <span>coming</span> <span>along?</span></p>
+              </div>
+              <video id="ph-chat" class="clip" src="assets/screens/chat_cut.mp4" muted playsinline
+                data-start="3.95" data-duration="5.0" data-media-start="0" data-track-index="2"></video>
+              <img id="ph-rem" class="clip" src="assets/screens/reminders_7am.png" alt=""
+                data-start="9.0" data-duration="4.3" data-track-index="0" />
+              <img id="ph-aura" class="clip" src="assets/screens/aura_profile.png" alt=""
+                data-start="13.35" data-duration="3.05" data-track-index="1" />
+              <div id="ph-punch"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const vars = (window.__hyperframes && window.__hyperframes.getVariables) ? window.__hyperframes.getVariables() : {};
+    const V = vars.layout === "vertical";
+    if (V) document.getElementById("ph-layout").classList.add("v");
+
+    const tl = gsap.timeline({ paused: true });
+    const cam = "#ph-cam";
+    // 16:9: the phone shifts left a touch while zoomed. 9:16: a gentler zoom (the phone is already
+    // 1.27x) and a vertical shift that parks the point of interest at y=1180, inside the Reels safe area.
+    const K = 1.27, REST_TOP = 660, PH = 959;
+    const shot = (o, s) => {
+      if (!V) return { scale: s, x: -40, y: 0, transformOrigin: `50% ${o}%` };
+      const sv = 1 + (s - 1) * 0.55;
+      const p = REST_TOP + (o / 100) * PH * K;
+      const y = sv > 1.1 ? (1180 - p) / K : 0;
+      return { scale: sv, x: 0, y, transformOrigin: `50% ${o}%` };
+    };
+    const rest = (o) => ({ scale: 1, x: 0, y: 0, transformOrigin: `50% ${o}%` });
+    const move = (t, from, to, d = 0.55) =>
+      tl.fromTo(cam, from, { ...to, duration: d, ease: "power3.inOut", immediateRender: false }, t);
+
+    // a screen fades out in 150 ms, the frame stays empty for 50 ms, then the next one comes in
+    const screenIn = (sel, t) =>
+      tl.fromTo(sel, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out", immediateRender: false }, t);
+    const screenOut = (sel, t) =>
+      tl.fromTo(sel, { opacity: 1 }, { opacity: 0, duration: 0.15, ease: "power1.in", immediateRender: false }, t);
+
+    // entrance: the phone is already there, it just settles
+    tl.fromTo(cam, { y: 40 }, { y: 0, duration: 0.45, ease: "power3.out" }, 0);
+
+    // 1. voice (0 - 3.9): Aura's opening line types in with its speech
+    tl.fromTo("#ph-tx span", { opacity: 0, y: 10 },
+      { opacity: 1, y: 0, duration: 0.14, ease: "power2.out", stagger: 0.24 }, 0.75);
+    move(0.85, rest(55), shot(55, 1.05));
+    move(3.15, shot(55, 1.05), rest(55), 0.45);
+    screenOut("#ph-voice", 3.75);
+    screenOut("#ph-tx", 3.75);
+
+    // 2. chat (3.95 - 8.95): 0.6 s of thinking, then zoom onto the reply and hold it ~2 s
+    screenIn("#ph-chat", 3.95);
+    move(5.65, rest(76), shot(76, 1.6));
+    move(8.2, shot(76, 1.6), rest(76), 0.45);
+    screenOut("#ph-chat", 8.8);
+
+    // 3. reminders (9.0 - 13.3): the set reminders, then a pan down to the 7:00 AM alarm
+    screenIn("#ph-rem", 9.0);
+    move(9.45, rest(44), shot(44, 1.6));
+    move(10.9, shot(44, 1.6), shot(76, 1.6), 0.6);
+    move(12.6, shot(76, 1.6), rest(76), 0.45);
+    screenOut("#ph-rem", 13.15);
+
+    // 4. Your Aura (13.35 - 16.4): what Aura remembers, editable
+    screenIn("#ph-aura", 13.35);
+    move(13.9, rest(48), shot(48, 1.65));
+
+    // exit to the end card: the phone fades out in 150 ms
+    tl.fromTo(cam, { opacity: 1 }, { opacity: 0, duration: 0.15, ease: "power1.in", immediateRender: false }, 16.25);
+
+    window.__timelines["phone"] = tl;
+  </script>
+</template>

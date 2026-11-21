@@ -2,6 +2,8 @@
 
 Aura Content Studio is a private daily marketing workspace for Aura Desktop, the Windows application only. A LangGraph orchestrator researches current trends, asks for idea approval in Telegram, prepares a production-ready Higgsfield direction, and reviews uploaded video with Gemini. Higgsfield generation is always manual.
 
+Code-built promo videos (Play Store, Reels/Shorts/TikTok, store art) live separately in [`video-studio/`](video-studio/README.md), with every video listed in [`video-studio/CATALOG.md`](video-studio/CATALOG.md).
+
 The owner experience is username and password only. A successful login creates a random opaque session stored in Postgres. The browser receives an HTTP-only, secure, same-site session cookie that disappears when the browser session closes. The database session expires after 12 hours even if the browser remains open.
 
 ## Architecture

@@ -1,0 +1,36 @@
+{
+  "slug": "2026-11-21-play-store-launch",
+  "title": "Play Store launch: Aura remembers you",
+  "status": "delivered",
+  "created": "2026-11-21",
+  "campaign": "Google Play store listing, keywords: AI companion, AI friend, AI that remembers you, someone to talk to",
+  "app": { "name": "Aura (Android)", "version": "2.21.0+39", "device": "Pixel 10 Pro XL, demo account" },
+  "duration_s": 19.6,
+  "formats": {
+    "landscape": { "root": "index.html", "size": [1920, 1080], "output": "landscape-1920x1080.mp4" },
+    "vertical": { "root": "vertical.html", "size": [1080, 1920], "output": "vertical-1080x1920.mp4" },
+    "feature-graphic": { "root": "feature-graphic/index.html", "kind": "still", "size": [1024, 500], "output": "feature-graphic-1024x500" }
+  },
+  "music": {
+    "file": "assets/music/song-570.mp3",
+    "source": "song_570.mp3 from the Aura ad kit",
+    "license": "UNVERIFIED: confirm the track's license allows paid ads before publishing",
+    "committed": false
+  },
+  "deliverables": {
+    "landscape": "renders/landscape-1920x1080.mp4",
+    "vertical": "renders/vertical-1080x1920.mp4",
+    "feature_graphic_png": "renders/feature-graphic-1024x500.png",
+    "feature_graphic_jpg": "renders/feature-graphic-1024x500.jpg"
+  },
+  "pixel_edits": [
+    "chat header and composer: Buddy -> Aura",
+    "reminders: 12:25 AM -> 7:00 AM, Next today -> Next tomorrow, alarm permission paragraph removed",
+    "Your Aura: 'Buddy remembers what matters to you' and 'GOALS BUDDY HAS NOTICED' -> Aura",
+    "voice call: app's small transcript erased, redrawn larger in HTML"
+  ],
+  "open_items": [
+    "feature graphic headline still says 'Buddy remembers you.'",
+    "the shipping app still shows 'Buddy'; publish the edited video once the app says Aura"
+  ]
+}

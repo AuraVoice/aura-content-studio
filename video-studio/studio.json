@@ -1,0 +1,11 @@
+{
+  "hyperframes_version": "0.9.77",
+  "fps": 30,
+  "formats": {
+    "landscape": { "size": [1920, 1080], "use": "Google Play promo video (uploaded to YouTube, linked in Play Console)" },
+    "vertical": { "size": [1080, 1920], "use": "Instagram Reels, YouTube Shorts, TikTok" },
+    "feature-graphic": { "size": [1024, 500], "use": "Google Play feature graphic (24-bit PNG or JPEG, no alpha)" }
+  },
+  "vertical_safe_area": { "top_px": 270, "bottom_px": 384 },
+  "type_floor_px": 28
+}
