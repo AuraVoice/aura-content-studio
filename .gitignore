@@ -12,3 +12,9 @@ graphify-out/
 
 .vercel
 /.swc
+
+# video studio: build output, review stills and licensed music never go to git
+video-studio/.build/
+video-studio/videos/*/.snapshots/
+video-studio/videos/*/assets/music/
+__pycache__/

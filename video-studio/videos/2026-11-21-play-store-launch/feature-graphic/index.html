@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1024, height=500" />
+    <style>
+      @font-face { font-family: "PlusJakartaSans"; src: url("assets/fonts/PlusJakartaSans-Regular.ttf"); font-weight: 400; }
+      @font-face { font-family: "PlusJakartaSans"; src: url("assets/fonts/PlusJakartaSans-Medium.ttf"); font-weight: 500; }
+      @font-face { font-family: "GeistMono"; src: url("assets/fonts/GeistMono-Medium.ttf"); font-weight: 500; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1024px; height: 500px; overflow: hidden; background: #edf6f3; }
+      #root { position: relative; width: 1024px; height: 500px; overflow: hidden; background: #edf6f3; }
+      .haze { position: absolute; border-radius: 50%; filter: blur(70px); }
+      #fg-teal { width: 560px; height: 560px; left: -200px; top: -260px; background: rgba(30, 200, 176, 0.30); }
+      #fg-amber { width: 480px; height: 480px; right: -150px; bottom: -260px; background: rgba(232, 160, 32, 0.20); }
+
+      #fg-copy { position: absolute; left: 72px; top: 0; height: 500px; width: 440px; display: flex; flex-direction: column; justify-content: center; }
+      #fg-kick { font-family: "GeistMono", monospace; font-weight: 500; font-size: 15px; letter-spacing: 0.16em; color: #0e6e61; text-transform: uppercase; display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+      #fg-kick i { width: 8px; height: 8px; border-radius: 50%; background: #1ec8b0; display: block; }
+      #fg-head { font-family: "Outfit", sans-serif; font-weight: 600; font-size: 60px; line-height: 1.0; letter-spacing: -0.035em; color: #1a1a1a; }
+      #fg-head em { font-style: normal; color: #148474; }
+      #fg-sub { font-family: "PlusJakartaSans", sans-serif; font-size: 21px; line-height: 1.4; color: #3f3f44; margin-top: 18px; }
+
+      .card { position: absolute; background: rgba(255, 255, 255, 0.88); border: 1px solid #e2e2e6; border-radius: 22px; box-shadow: 0 18px 44px rgba(20, 60, 55, 0.14); }
+      #fg-mem { left: 600px; top: 92px; width: 352px; padding: 20px 22px 18px; }
+      .label { font-family: "GeistMono", monospace; font-weight: 500; font-size: 12.5px; letter-spacing: 0.14em; color: #5f5f65; text-transform: uppercase; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+      .label svg { width: 15px; height: 15px; }
+      .row { font-family: "PlusJakartaSans", sans-serif; font-size: 16.5px; line-height: 1.38; color: #1a1a1a; display: flex; gap: 10px; margin-top: 7px; }
+      .row i { width: 5px; height: 5px; border-radius: 50%; background: #1ec8b0; margin-top: 9px; flex: none; display: block; }
+
+      #fg-rem { left: 668px; top: 302px; width: 300px; padding: 14px 16px; border-color: #f2d9a6; background: rgba(255, 251, 242, 0.95); }
+      #fg-rem .top { display: flex; align-items: center; gap: 12px; }
+      #fg-rem .bell { width: 38px; height: 38px; border-radius: 10px; background: #fbefd6; display: flex; align-items: center; justify-content: center; flex: none; }
+      #fg-rem .set { font-family: "GeistMono", monospace; font-size: 11px; letter-spacing: 0.12em; color: #8f5e10; }
+      #fg-rem .title { font-family: "Outfit", sans-serif; font-weight: 600; font-size: 18px; color: #1a1a1a; margin-top: 2px; }
+      #fg-rem .time { display: flex; align-items: baseline; gap: 10px; margin-top: 10px; padding-top: 9px; border-top: 1px solid #f0e3c8; }
+      #fg-rem .big { font-family: "Outfit", sans-serif; font-weight: 600; font-size: 28px; letter-spacing: -0.03em; color: #1a1a1a; }
+      #fg-rem .when { font-family: "PlusJakartaSans", sans-serif; font-size: 14px; color: #5f5f65; }
+
+      #fg-orb { position: absolute; left: 862px; top: 40px; width: 104px; height: 104px; filter: drop-shadow(0 10px 22px rgba(20, 130, 115, 0.30)); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="1" data-width="1024" data-height="500" data-no-timeline>
+      <div id="fg-teal" class="haze"></div>
+      <div id="fg-amber" class="haze"></div>
+
+      <div id="fg-copy">
+        <div id="fg-kick"><i></i>Your AI companion</div>
+        <div id="fg-head">Buddy<br />remembers <em>you.</em></div>
+        <div id="fg-sub">Talks like a friend, and gets your day done.</div>
+      </div>
+
+      <div id="fg-mem" class="card">
+        <div class="label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#1ec8b0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+          What you've shared
+        </div>
+        <div class="row"><i></i>Is training for their first half marathon in March</div>
+        <div class="row"><i></i>Is learning Spanish before a trip to Madrid in April</div>
+        <div class="row"><i></i>Loves indie music</div>
+      </div>
+
+      <div id="fg-rem" class="card">
+        <div class="top">
+          <div class="bell">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d68a1f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          </div>
+          <div>
+            <div class="set">✓ ALREADY SET</div>
+            <div class="title">Do an easy 5 mile run</div>
+          </div>
+        </div>
+        <div class="time"><span class="big">8:00 AM</span><span class="when">Saturday</span></div>
+      </div>
+
+      <img id="fg-orb" src="assets/orb.png" alt="" />
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+    </script>
+  </body>
+</html>

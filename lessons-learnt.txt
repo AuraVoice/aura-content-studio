@@ -51,3 +51,21 @@ Problem: Brave Search rate limits and Gemini 429 responses could prevent the wor
 Issue: Five Brave requests started concurrently despite request-rate enforcement, empty or failed search results were treated as terminal, and Prompt Director had no rate-limit fallback.
 Solution: Pace and retry Brave requests, continue with product-safe evergreen ideas when optional research or Trend Scout fails, and return a validated three-clip production package when Prompt Director is rate limited.
 Justification: Web research now improves an idea without becoming a prerequisite, while the highest-value output, a directly usable video prompt, remains available during provider throttling.
+
+2026-11-21
+Problem: The 9:16 promo rendered its phone cut off at y=1080 and its end card centred off the right edge.
+Issue: Each HyperFrames scene declared data-width="1920" data-height="1080" on its #root, and a scene's own declaration wins over the 1080x1920 host that mounts it.
+Solution: Remove fixed sizes from scene roots so they take the host size, and switch layouts with a per-mount `layout` variable read through getVariables().
+Justification: One scene set now renders 16:9 and 9:16 correctly, and video-studio/docs/scene-authoring.md forbids sizes on scene roots so the bug cannot come back.
+
+2026-11-21
+Problem: A second root file for the vertical cut failed `hyperframes check` (multiple_root_compositions), and sharing scenes through Windows junctions made the renderer refuse them as files outside the project.
+Issue: HyperFrames allows one root per project, and junctions do not survive git anyway.
+Solution: video-studio/tools/studio.py assembles a throwaway project per format under video-studio/.build/ from the single source folder, then runs the pinned CLI there.
+Justification: One source of truth for scenes, no links in git, no --include-outside-files, and renders stay byte-identical between runs.
+
+2026-11-21
+Problem: Erasing and redrawing text in real screen recordings left descender stubs, faint ellipsis dots and vertical streaks in some frames while single-frame checks looked clean.
+Issue: The search boxes stopped at the baseline, light glyphs fell under the ink threshold, and the voice transcript moved between frames, so a box measured on one frame missed others.
+Solution: Include descenders, erase past the old text's right edge, take the union of text rows across every frame, cache one patch per layout state and fail the recipe if any frame matches no state.
+Justification: The recipe now refuses to produce a clip where old text could leak, and every rule is listed in video-studio/docs/pixel-patching.md.

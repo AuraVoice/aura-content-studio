@@ -42,7 +42,7 @@ Rules:
 
 ## Aura Content Studio
 
-- This repository is only for Aura Desktop marketing on Windows.
+- The Next.js app (`src/`, `supabase/`, `workflows/`) is only for Aura Desktop marketing on Windows. The rules in this section apply to it.
 - Aura Desktop is a Windows AI voice companion. Read `src/lib/product.ts` before changing product claims.
 - Never claim autonomous clicking, computer control, or permanent screen-frame storage.
 - Higgsfield generation is manual. No implementation may spend a Higgsfield credit.
@@ -50,6 +50,14 @@ Rules:
 - Human approval uses LangGraph `interrupt()` and resumes from Telegram.
 - Preserve prompt locked attributes during surgical revisions.
 - Use Supabase application records and LangGraph checkpoints as the durable source of truth.
+
+## Video studio (`video-studio/`)
+
+- Code-built promo videos and store art for Aura (mobile and desktop) from real captured screens, rendered with HyperFrames. Independent of the Next.js app.
+- For any promo video, app ad, Reels/Shorts/TikTok cut, Play Store video or feature graphic, invoke the `aura-promo-video` skill (`.claude/skills/aura-promo-video/SKILL.md`) first, and read `video-studio/README.md`.
+- Follow the strict folder structure in `video-studio/README.md`; `video-studio/tools/studio.py` is the only entry point (new, prepare, check, snapshot, preview, render, catalog).
+- Real app only: patches may rename, re-time or remove UI the app really shows, never invent it. Log every pixel edit in the video's README and `video.json`.
+- Music is never committed. Renders, captures and fonts go through Git LFS.
 
 ## Design System
 

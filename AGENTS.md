@@ -2,7 +2,7 @@
 
 ## Product boundary
 
-This repository produces marketing content only for Aura Desktop, the Windows application.
+The Next.js campaign app (`src/`, `supabase/`, `workflows/`) produces marketing content only for Aura Desktop, the Windows application. The rules below apply to it. The separate `video-studio/` folder builds promo videos for any Aura surface from real captured screens; its rules live in `video-studio/README.md` and the `aura-promo-video` skill (`.claude/skills/aura-promo-video/SKILL.md`).
 
 - Keep every concept, script, visual, and claim on the Windows desktop product.
 - Never claim Aura autonomously clicks, controls, or operates a computer.
